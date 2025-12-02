@@ -41,17 +41,18 @@ def get_context_cache_path(movie_title: str, movie_year: int) -> Path:
     """
     # Sanitize title - keep only alphanumeric, spaces, and underscores
     safe_title = "".join(
-        c for c in f"{movie_title}_{movie_year}"
-        if c.isalnum() or c in (' ', '_')
+        c for c in f"{movie_title}_{movie_year}" if c.isalnum() or c in (" ", "_")
     ).rstrip()
 
     # Replace spaces with underscores
-    safe_title = safe_title.replace(' ', '_')
+    safe_title = safe_title.replace(" ", "_")
 
     return CACHE_DIR / f"{safe_title}_context.json"
 
 
-def load_cached_context(movie_title: str, movie_year: int) -> Optional[TranslationContext]:
+def load_cached_context(
+    movie_title: str, movie_year: int
+) -> Optional[TranslationContext]:
     """
     Load cached translation context if available.
 
@@ -82,7 +83,7 @@ def load_cached_context(movie_title: str, movie_year: int) -> Optional[Translati
             raw_json=cached_data,
         )
 
-        console.print(f"[green]Using cached context from previous run[/green]")
+        console.print("[green]Using cached context from previous run[/green]")
         console.print(f"[dim]Cache: {context_path}[/dim]")
         console.print(
             f"[green]Loaded {len(context.characters)} characters, "
@@ -98,7 +99,9 @@ def load_cached_context(movie_title: str, movie_year: int) -> Optional[Translati
         return None
 
 
-def save_context_cache(context: TranslationContext, movie_title: str, movie_year: int) -> bool:
+def save_context_cache(
+    context: TranslationContext, movie_title: str, movie_year: int
+) -> bool:
     """
     Save translation context to cache.
 

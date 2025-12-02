@@ -78,29 +78,32 @@ def test_get_wanted_movies_filters_missing_source(monkeypatch):
                 "year": 2020,
                 "radarrId": 1,
                 "missing_subtitles": [{"code2": "fi"}],
-                "subtitles": [{"code2": "en", "code3": "eng"}]
+                "subtitles": [{"code2": "en", "code3": "eng"}],
             },
             {
                 "title": "Movie Without English",
                 "year": 2021,
                 "radarrId": 2,
                 "missing_subtitles": [{"code2": "fi"}],
-                "subtitles": [{"code2": "fr"}]
-            }
+                "subtitles": [{"code2": "fr"}],
+            },
         ]
     }
 
     class MockResponse:
         def json(self):
             return mock_data
+
         def raise_for_status(self):
             pass
 
     class MockClient:
         def __enter__(self):
             return self
+
         def __exit__(self, *args):
             pass
+
         def get(self, *args, **kwargs):
             return MockResponse()
 
@@ -123,7 +126,7 @@ def test_get_wanted_movies_skip_logging(monkeypatch, capsys):
                 "year": 2020,
                 "radarrId": 1,
                 "missing_subtitles": [{"code2": "fi"}],
-                "subtitles": [{"code2": "fr"}, {"code2": "de"}]
+                "subtitles": [{"code2": "fr"}, {"code2": "de"}],
             }
         ]
     }
@@ -131,14 +134,17 @@ def test_get_wanted_movies_skip_logging(monkeypatch, capsys):
     class MockResponse:
         def json(self):
             return mock_data
+
         def raise_for_status(self):
             pass
 
     class MockClient:
         def __enter__(self):
             return self
+
         def __exit__(self, *args):
             pass
+
         def get(self, *args, **kwargs):
             return MockResponse()
 
@@ -163,7 +169,7 @@ def test_get_wanted_movies_respects_source_lang_parameter(monkeypatch):
                 "year": 2020,
                 "radarrId": 1,
                 "missing_subtitles": [{"code2": "fi"}],
-                "subtitles": [{"code2": "es"}]
+                "subtitles": [{"code2": "es"}],
             }
         ]
     }
@@ -171,14 +177,17 @@ def test_get_wanted_movies_respects_source_lang_parameter(monkeypatch):
     class MockResponse:
         def json(self):
             return mock_data
+
         def raise_for_status(self):
             pass
 
     class MockClient:
         def __enter__(self):
             return self
+
         def __exit__(self, *args):
             pass
+
         def get(self, *args, **kwargs):
             return MockResponse()
 
@@ -212,10 +221,7 @@ def test_apply_path_mapping_multiple():
     """Should try all mappings in order."""
     from subtrans.integrations.bazarr import apply_path_mapping
 
-    mappings = [
-        ("/volume1/movies", "/mnt/movies"),
-        ("/volume2/tv", "/mnt/tv")
-    ]
+    mappings = [("/volume1/movies", "/mnt/movies"), ("/volume2/tv", "/mnt/tv")]
     result = apply_path_mapping("/volume2/tv/Show/s01e01.mkv", mappings)
     assert result == "/mnt/tv/Show/s01e01.mkv"
 
@@ -224,10 +230,7 @@ def test_apply_path_mapping_first_match_wins():
     """Should use first matching mapping."""
     from subtrans.integrations.bazarr import apply_path_mapping
 
-    mappings = [
-        ("/volume1", "/mnt1"),
-        ("/volume1/movies", "/mnt/movies")
-    ]
+    mappings = [("/volume1", "/mnt1"), ("/volume1/movies", "/mnt/movies")]
     result = apply_path_mapping("/volume1/movies/test.mkv", mappings)
     assert result == "/mnt1/movies/test.mkv"
 

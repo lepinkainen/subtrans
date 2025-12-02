@@ -1,8 +1,6 @@
 """Tests for CLI extract-only mode."""
 
-from pathlib import Path
-from unittest.mock import Mock, patch
-import pysrt
+from unittest.mock import patch
 
 
 def test_extract_only_skips_translation(tmp_path):
@@ -12,10 +10,13 @@ def test_extract_only_skips_translation(tmp_path):
 
     # Create a test SRT file
     srt_path = tmp_path / "test.en.srt"
-    srt_path.write_text("""1
+    srt_path.write_text(
+        """1
 00:00:01,000 --> 00:00:02,000
 Test subtitle
-""", encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
 
     # Create test movie
     movie = Movie(
@@ -50,14 +51,17 @@ def test_extract_only_loads_subtitle(tmp_path):
 
     # Create a test SRT file with multiple entries
     srt_path = tmp_path / "test.en.srt"
-    srt_path.write_text("""1
+    srt_path.write_text(
+        """1
 00:00:01,000 --> 00:00:02,000
 First subtitle
 
 2
 00:00:03,000 --> 00:00:04,000
 Second subtitle
-""", encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
 
     movie = Movie(
         radarr_id=1,

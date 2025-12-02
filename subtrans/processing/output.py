@@ -42,7 +42,9 @@ def save_translated_subtitle(
             for ext in [".mkv", ".mp4", ".avi"]:
                 videos = list(movie_dir.glob(f"*{ext}"))
                 if videos:
-                    output_path = videos[0].parent / f"{videos[0].stem}.{target_lang}.srt"
+                    output_path = (
+                        videos[0].parent / f"{videos[0].stem}.{target_lang}.srt"
+                    )
                     break
             else:
                 output_path = movie_dir / f"movie.{target_lang}.srt"
@@ -53,11 +55,11 @@ def save_translated_subtitle(
         return output_path
     except (PermissionError, OSError) as e:
         # If we can't write to NAS, save to local cache instead
-        console.print(
-            f"[yellow]Cannot write to {output_path}: {e}[/yellow]"
-        )
-        safe_title = "".join(c for c in f"{movie_title}_{movie_year}" if c.isalnum() or c in (' ', '_')).rstrip()
-        safe_title = safe_title.replace(' ', '_')
+        console.print(f"[yellow]Cannot write to {output_path}: {e}[/yellow]")
+        safe_title = "".join(
+            c for c in f"{movie_title}_{movie_year}" if c.isalnum() or c in (" ", "_")
+        ).rstrip()
+        safe_title = safe_title.replace(" ", "_")
         fallback_path = CACHE_DIR / f"{safe_title}.{target_lang}.srt"
         translated_subs.save(fallback_path, encoding="utf-8")
         console.print(f"[yellow]Saved to local cache instead: {fallback_path}[/yellow]")

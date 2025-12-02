@@ -78,8 +78,8 @@ def test_save_and_load_context_roundtrip(tmp_path, monkeypatch):
             "genre": "drama",
             "tone": "formal",
             "formality_recommendation": "formal",
-            "style_notes": "Period piece"
-        }
+            "style_notes": "Period piece",
+        },
     )
 
     # Save

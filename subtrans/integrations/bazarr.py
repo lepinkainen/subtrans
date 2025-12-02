@@ -9,8 +9,7 @@ from ..core.utils import console
 
 
 def _has_source_subtitle(
-    existing_subtitles: list[dict],
-    source_lang: str
+    existing_subtitles: list[dict], source_lang: str
 ) -> tuple[bool, list[str]]:
     """
     Check if a movie has subtitles in the source language.
@@ -41,10 +40,10 @@ def _has_source_subtitle(
     for subtitle in existing_subtitles:
         # Check code2, code3, language fields in order
         lang = (
-            subtitle.get("code2") or
-            subtitle.get("code3") or
-            subtitle.get("language") or
-            ""
+            subtitle.get("code2")
+            or subtitle.get("code3")
+            or subtitle.get("language")
+            or ""
         )
 
         # Skip empty/null values
@@ -61,7 +60,9 @@ def _has_source_subtitle(
     return False, found_langs
 
 
-def get_wanted_movies(base_url: str, api_key: str, source_lang: str = "en", target_lang: str = "fi") -> list[Movie]:
+def get_wanted_movies(
+    base_url: str, api_key: str, source_lang: str = "en", target_lang: str = "fi"
+) -> list[Movie]:
     """
     Fetch movies missing target language subtitles from Bazarr.
 
@@ -102,7 +103,10 @@ def get_wanted_movies(base_url: str, api_key: str, source_lang: str = "en", targ
         missing_langs = [s.get("code2", s.get("code3", "")) for s in missing]
 
         # Check for both exact match and startswith (handles 2-letter and 3-letter codes)
-        if any(lang == target_lang or lang.startswith(target_lang) for lang in missing_langs):
+        if any(
+            lang == target_lang or lang.startswith(target_lang)
+            for lang in missing_langs
+        ):
             # Check for source language availability
             existing_subs = item.get("subtitles", [])
             has_source, found_langs = _has_source_subtitle(existing_subs, source_lang)
@@ -131,9 +135,7 @@ def get_wanted_movies(base_url: str, api_key: str, source_lang: str = "en", targ
     return movies
 
 
-def populate_movie_path(
-    movie: Movie, base_url: str, api_key: str
-) -> bool:
+def populate_movie_path(movie: Movie, base_url: str, api_key: str) -> bool:
     """
     Fetch and populate the movie path from Bazarr API.
 
@@ -150,7 +152,9 @@ def populate_movie_path(
 
     try:
         with httpx.Client(timeout=30) as client:
-            response = client.get(url, headers=headers, params={"radarrid": movie.radarr_id})
+            response = client.get(
+                url, headers=headers, params={"radarrid": movie.radarr_id}
+            )
             response.raise_for_status()
             data = response.json()
 
@@ -178,9 +182,7 @@ def populate_movie_path(
             return False
 
     except Exception as e:
-        console.print(
-            f"[red]Failed to get path for '{movie.title}': {e}[/red]"
-        )
+        console.print(f"[red]Failed to get path for '{movie.title}': {e}[/red]")
         return False
 
 

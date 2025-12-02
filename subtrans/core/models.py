@@ -31,8 +31,8 @@ class Config:
 
     bazarr_url: str
     bazarr_api_key: str
-    analysis_model: str      # Model for Pass 1: Context analysis
-    translation_model: str   # Model for Pass 2: Translation
+    analysis_model: str  # Model for Pass 1: Context analysis
+    translation_model: str  # Model for Pass 2: Translation
     batch_size: int
     path_mappings: list[tuple[str, str]]
     skip_analysis: bool
@@ -51,6 +51,8 @@ class TranslationContext:
     terms: dict[str, str]  # Recurring terms/phrases -> Target translation
     genre: str
     tone: str  # formal, informal, mixed
-    formality: str | None  # Language-specific formality guidance (e.g., "te"/"sinä" for Finnish)
+    formality: (
+        str | None
+    )  # Language-specific formality guidance (e.g., "te"/"sinä" for Finnish)
     style_notes: str
     raw_json: dict

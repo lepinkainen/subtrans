@@ -11,7 +11,7 @@ def test_movie_dataclass():
         year=2024,
         path="/path/to/movie.mkv",
         missing_subtitles=["fi"],
-        existing_subtitles=["en"]
+        existing_subtitles=["en"],
     )
     assert movie.title == "Test Movie"
     assert movie.year == 2024
@@ -26,10 +26,7 @@ def test_subtitle_track_dataclass():
     from subtrans.core.models import SubtitleTrack
 
     track = SubtitleTrack(
-        track_id=2,
-        language="eng",
-        name="English",
-        codec="SubRip/SRT"
+        track_id=2, language="eng", name="English", codec="SubRip/SRT"
     )
     assert track.track_id == 2
     assert track.language == "eng"
@@ -50,7 +47,7 @@ def test_config_dataclass():
         path_mappings=[("/volume1", "/mnt")],
         skip_analysis=False,
         save_context=True,
-        dry_run=False
+        dry_run=False,
     )
     assert config.bazarr_url == "http://test:6767"
     assert config.bazarr_api_key == "test_key"
@@ -75,7 +72,7 @@ def test_translation_context_dataclass():
         tone="serious",
         formality="informal",
         style_notes="Modern slang",
-        raw_json={"test": "data"}
+        raw_json={"test": "data"},
     )
     assert context.genre == "action"
     assert context.tone == "serious"

@@ -1,7 +1,5 @@
 """Tests for processing.subtitles module."""
 
-from pathlib import Path
-
 
 def test_find_mkv_file_direct(tmp_path):
     """Should find MKV when path IS the MKV file."""

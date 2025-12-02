@@ -1,14 +1,16 @@
 """Tests for processing.output module."""
 
+import sys
 from pathlib import Path
-from unittest.mock import Mock
 
-import pysrt
+# Add the project root to path to allow imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 def test_save_translated_subtitle_simple_filename(tmp_path):
     """Should correctly name output file for simple filename."""
     from subtrans.processing.output import save_translated_subtitle
+    import pysrt
 
     # Create a dummy MKV file
     mkv = tmp_path / "movie.mkv"
@@ -34,6 +36,7 @@ def test_save_translated_subtitle_simple_filename(tmp_path):
 def test_save_translated_subtitle_multiple_dots(tmp_path):
     """Should correctly name output file for filename with multiple dots."""
     from subtrans.processing.output import save_translated_subtitle
+    import pysrt
 
     # Create a dummy MKV file with multiple dots
     mkv = tmp_path / "Movie [1080p][x264].mkv"
@@ -59,9 +62,13 @@ def test_save_translated_subtitle_multiple_dots(tmp_path):
 def test_save_translated_subtitle_complex_real_world(tmp_path):
     """Should correctly name output file for complex real-world filename."""
     from subtrans.processing.output import save_translated_subtitle
+    import pysrt
 
     # Create a dummy MKV file with complex real-world naming
-    mkv = tmp_path / "Christmas Island (2023) {imdb-tt29378386} [WEBDL-1080p][EAC3 5.1][x264].mkv"
+    mkv = (
+        tmp_path
+        / "Christmas Island (2023) {imdb-tt29378386} [WEBDL-1080p][EAC3 5.1][x264].mkv"
+    )
     mkv.touch()
 
     # Create mock subtitle file
@@ -77,7 +84,10 @@ def test_save_translated_subtitle_complex_real_world(tmp_path):
     result = save_translated_subtitle(subs, str(tmp_path), mkv_path=mkv)
 
     # Check output path preserves entire filename structure
-    expected = tmp_path / "Christmas Island (2023) {imdb-tt29378386} [WEBDL-1080p][EAC3 5.1][x264].fi.srt"
+    expected = (
+        tmp_path
+        / "Christmas Island (2023) {imdb-tt29378386} [WEBDL-1080p][EAC3 5.1][x264].fi.srt"
+    )
     assert result == expected
     assert result.exists()
 
@@ -85,6 +95,7 @@ def test_save_translated_subtitle_complex_real_world(tmp_path):
 def test_save_translated_subtitle_with_directory_path(tmp_path):
     """Should correctly name output file when movie_path is a file."""
     from subtrans.processing.output import save_translated_subtitle
+    import pysrt
 
     # Create a subdirectory
     movie_dir = tmp_path / "movies"
@@ -114,6 +125,7 @@ def test_save_translated_subtitle_with_directory_path(tmp_path):
 def test_save_translated_subtitle_find_video_in_directory(tmp_path):
     """Should find video file in directory and use it for naming."""
     from subtrans.processing.output import save_translated_subtitle
+    import pysrt
 
     # Create video files in directory
     (tmp_path / "movie.mkv").touch()
@@ -136,10 +148,13 @@ def test_save_translated_subtitle_find_video_in_directory(tmp_path):
     assert result.exists()
 
 
-def test_save_translated_subtitle_fallback_to_cache_on_permission_error(tmp_path, monkeypatch):
+def test_save_translated_subtitle_fallback_to_cache_on_permission_error(
+    tmp_path, monkeypatch
+):
     """Should fallback to cache directory when write fails."""
     from subtrans.processing.output import save_translated_subtitle
     from subtrans.core.utils import CACHE_DIR
+    import pysrt
 
     # Create a dummy MKV file
     mkv = tmp_path / "movie.mkv"
@@ -169,7 +184,9 @@ def test_save_translated_subtitle_fallback_to_cache_on_permission_error(tmp_path
     monkeypatch.setattr(subs, "save", mock_save)
 
     # Save subtitle
-    result = save_translated_subtitle(subs, str(tmp_path), mkv_path=mkv, movie_title="Test Movie", movie_year=2023)
+    result = save_translated_subtitle(
+        subs, str(tmp_path), mkv_path=mkv, movie_title="Test Movie", movie_year=2023
+    )
 
     # Should fallback to cache directory
     assert result == CACHE_DIR / "Test_Movie_2023.fi.srt"

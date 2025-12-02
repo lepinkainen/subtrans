@@ -23,7 +23,9 @@ from .processing.translator import analyze_subtitles, translate_subtitles_batch
 from .processing.output import save_translated_subtitle
 
 
-def select_movies_interactive(movies: list[Movie], target_lang: str = "fi") -> list[Movie]:
+def select_movies_interactive(
+    movies: list[Movie], target_lang: str = "fi"
+) -> list[Movie]:
     """
     Interactive movie selection using rich.
 
@@ -35,7 +37,9 @@ def select_movies_interactive(movies: list[Movie], target_lang: str = "fi") -> l
         List of selected movies
     """
     if not movies:
-        console.print(f"[yellow]No movies missing {target_lang} subtitles found.[/yellow]")
+        console.print(
+            f"[yellow]No movies missing {target_lang} subtitles found.[/yellow]"
+        )
         return []
 
     # Display table
@@ -143,7 +147,9 @@ def process_movie(
     console.print(f"[green]Loaded {len(subs)} subtitle entries[/green]")
 
     if extract_only:
-        console.print("[yellow]Extract-only mode - subtitle cached successfully[/yellow]")
+        console.print(
+            "[yellow]Extract-only mode - subtitle cached successfully[/yellow]"
+        )
         return True
 
     if dry_run:
@@ -159,10 +165,12 @@ def process_movie(
         if context is None:
             # No cached context, run analysis
             context = analyze_subtitles(
-                subs, client, movie.title,
+                subs,
+                client,
+                movie.title,
                 model=analysis_model,
                 source_lang=source_lang,
-                target_lang=target_lang
+                target_lang=target_lang,
             )
 
             # Optionally save context for review/reuse in cache directory
@@ -189,9 +197,11 @@ def process_movie(
         mkv_path,
         movie.title,
         movie.year,
-        target_lang=target_lang
+        target_lang=target_lang,
     )
-    console.print(f"[bold green]Saved {target_lang} subtitles: {output_path}[/bold green]")
+    console.print(
+        f"[bold green]Saved {target_lang} subtitles: {output_path}[/bold green]"
+    )
 
     # Note: No cleanup needed - cached subtitles are kept for reuse
 
@@ -224,10 +234,14 @@ def main():
 
     # Display config info
     console.print(f"[blue]Bazarr URL: {config.bazarr_url}[/blue]")
-    console.print(f"[blue]Languages: {config.source_language} → {config.target_language}[/blue]")
+    console.print(
+        f"[blue]Languages: {config.source_language} → {config.target_language}[/blue]"
+    )
 
     if args.extract_only:
-        console.print("[yellow]Extract-only mode: Subtitles will be cached without translation[/yellow]")
+        console.print(
+            "[yellow]Extract-only mode: Subtitles will be cached without translation[/yellow]"
+        )
     else:
         console.print(f"[blue]Analysis model: {config.analysis_model}[/blue]")
         console.print(f"[blue]Translation model: {config.translation_model}[/blue]")
@@ -242,9 +256,7 @@ def main():
     api_key = os.environ.get("OPENAI_API_KEY")
 
     if not api_key and not config.dry_run and not args.extract_only:
-        console.print(
-            "[red]OPENAI_API_KEY environment variable not set[/red]"
-        )
+        console.print("[red]OPENAI_API_KEY environment variable not set[/red]")
         sys.exit(1)
 
     client = OpenAI(api_key=api_key) if api_key else None
@@ -257,11 +269,13 @@ def main():
         config.bazarr_url,
         config.bazarr_api_key,
         source_lang=config.source_language,
-        target_lang=config.target_language
+        target_lang=config.target_language,
     )
 
     if not movies:
-        console.print(f"[yellow]No movies found missing {config.target_language} subtitles.[/yellow]")
+        console.print(
+            f"[yellow]No movies found missing {config.target_language} subtitles.[/yellow]"
+        )
         sys.exit(0)
 
     console.print(
