@@ -67,8 +67,8 @@ def test_has_source_subtitle_case_insensitive():
     assert "en" in found_langs
 
 
-def test_get_wanted_movies_filters_missing_source(monkeypatch):
-    """Movies without source language subtitles should be filtered out."""
+def test_get_wanted_movies_includes_all_missing_target(monkeypatch):
+    """Movies missing target subtitles should be included regardless of source."""
     from subtrans.integrations.bazarr import get_wanted_movies
 
     mock_data = {
@@ -111,12 +111,15 @@ def test_get_wanted_movies_filters_missing_source(monkeypatch):
 
     result = get_wanted_movies("http://test", "key", source_lang="en", target_lang="fi")
 
-    assert len(result) == 1
-    assert result[0].title == "Movie With English"
+    # Both movies should be included - no longer filtered by source language
+    assert len(result) == 2
+    titles = [movie.title for movie in result]
+    assert "Movie With English" in titles
+    assert "Movie Without English" in titles
 
 
-def test_get_wanted_movies_skip_logging(monkeypatch, capsys):
-    """Should log skip messages for movies without source subtitles."""
+def test_get_wanted_movies_includes_all_without_source_logging(monkeypatch, capsys):
+    """Should include movies even without source subtitles."""
     from subtrans.integrations.bazarr import get_wanted_movies
 
     mock_data = {
@@ -152,10 +155,9 @@ def test_get_wanted_movies_skip_logging(monkeypatch, capsys):
 
     result = get_wanted_movies("http://test", "key", source_lang="en", target_lang="fi")
 
-    assert len(result) == 0
-    # Note: Console output testing requires rich console capture, which is complex
-    # The skip message is logged via console.print() but not easily testable without
-    # mocking the entire rich console. The manual testing will verify this.
+    # Movie should be included - no longer filtered by source language
+    assert len(result) == 1
+    assert result[0].title == "Test Movie"
 
 
 def test_get_wanted_movies_respects_source_lang_parameter(monkeypatch):

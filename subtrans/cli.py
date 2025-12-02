@@ -183,201 +183,269 @@ def process_movie(
             if show_context and context.raw_json:
                 from rich.json import JSON
                 from rich.panel import Panel
-                
-                console.print("\n[bold blue]Translation Context (Pass 1 Analysis):[/bold blue]")
-                
+
+                console.print(
+                    "\n[bold blue]Translation Context (Pass 1 Analysis):[/bold blue]"
+                )
+
                 # Create a pretty JSON display
                 json_content = JSON.from_data(context.raw_json, indent=2)
                 panel = Panel(
                     json_content,
                     title=f"Context for {movie.title} ({movie.year})",
                     title_align="left",
-                    border_style="blue"
+                    border_style="blue",
                 )
                 console.print(panel)
-                
+
                 # Wait for user confirmation
-                console.print("\n[yellow]Continue with translation (Pass 2)? [Y/n/e/d][/yellow]")
-                console.print("[dim]Y=yes, n=no, e=edit context JSON, d=diff with cached[/dim]")
+                console.print(
+                    "\n[yellow]Continue with translation (Pass 2)? [Y/n/e/d][/yellow]"
+                )
+                console.print(
+                    "[dim]Y=yes, n=no, e=edit context JSON, d=diff with cached[/dim]"
+                )
                 response = input("> ").strip().lower()
-                
+
                 if response == "e":
                     # Edit the context JSON file
                     import os
                     import subprocess
                     import sys
-                    
+
                     context_path = get_context_cache_path(movie.title, movie.year)
-                    
+
                     # Ensure the context is saved before editing
                     if not context_path.exists():
                         save_context_cache(context, movie.title, movie.year)
-                    
+
                     # Get the editor from environment or default
-                    editor = os.environ.get('EDITOR', 'nano' if sys.platform != 'win32' else 'notepad')
-                    
+                    editor = os.environ.get(
+                        "EDITOR", "nano" if sys.platform != "win32" else "notepad"
+                    )
+
                     try:
-                        console.print(f"[blue]Opening {context_path} with {editor}...[/blue]")
+                        console.print(
+                            f"[blue]Opening {context_path} with {editor}...[/blue]"
+                        )
                         subprocess.run([editor, str(context_path)], check=True)
-                        
+
                         # Reload the context after editing
                         edited_context = load_cached_context(movie.title, movie.year)
                         if edited_context:
                             context = edited_context
-                            console.print("[green]Context reloaded after editing[/green]")
-                            
+                            console.print(
+                                "[green]Context reloaded after editing[/green]"
+                            )
+
                             # Show the edited context
                             json_content = JSON.from_data(context.raw_json, indent=2)
                             panel = Panel(
                                 json_content,
                                 title=f"Edited Context for {movie.title} ({movie.year})",
                                 title_align="left",
-                                border_style="green"
+                                border_style="green",
                             )
                             console.print(panel)
-                            
+
                             # Ask again what to do
-                            console.print("\n[yellow]Continue with translation (Pass 2)? [Y/n][/yellow]")
+                            console.print(
+                                "\n[yellow]Continue with translation (Pass 2)? [Y/n][/yellow]"
+                            )
                             response = input("> ").strip().lower()
                         else:
-                            console.print("[red]Failed to reload edited context, using original[/red]")
+                            console.print(
+                                "[red]Failed to reload edited context, using original[/red]"
+                            )
                     except subprocess.CalledProcessError:
                         console.print(f"[red]Failed to open editor '{editor}'[/red]")
                     except FileNotFoundError:
-                        console.print(f"[red]Editor '{editor}' not found. Please set EDITOR environment variable.[/red]")
+                        console.print(
+                            f"[red]Editor '{editor}' not found. Please set EDITOR environment variable.[/red]"
+                        )
                     except Exception as e:
                         console.print(f"[red]Error editing context: {e}[/red]")
-                
+
                 elif response == "d":
                     # Show diff with cached context if it exists
                     cached_context = load_cached_context(movie.title, movie.year)
                     if cached_context and cached_context.raw_json != context.raw_json:
-                        console.print("[blue]Showing differences between current and cached context:[/blue]")
+                        console.print(
+                            "[blue]Showing differences between current and cached context:[/blue]"
+                        )
                         # Simple diff display
-                        import json
-                        from rich.console import Group
                         from rich.columns import Columns
-                        
+
                         cached_panel = Panel(
                             JSON.from_data(cached_context.raw_json, indent=2),
                             title="Cached Context",
-                            border_style="red"
+                            border_style="red",
                         )
-                        
+
                         current_panel = Panel(
                             JSON.from_data(context.raw_json, indent=2),
                             title="Current Context",
-                            border_style="green"
+                            border_style="green",
                         )
-                        
-                        console.print(Columns([cached_panel, current_panel], equal=True))
-                        
+
+                        console.print(
+                            Columns([cached_panel, current_panel], equal=True)
+                        )
+
                         # Ask again what to do
-                        console.print("\n[yellow]Continue with translation (Pass 2)? [Y/n/e][/yellow]")
+                        console.print(
+                            "\n[yellow]Continue with translation (Pass 2)? [Y/n/e][/yellow]"
+                        )
                         console.print("[dim]Y=yes, n=no, e=edit current context[/dim]")
                         response = input("> ").strip().lower()
-                        
+
                         # Process the response again (but only handle 'e' here to avoid recursion)
                         if response == "e":
                             # Edit the context JSON file
                             import os
                             import subprocess
                             import sys
-                            
-                            context_path = get_context_cache_path(movie.title, movie.year)
-                            
+
+                            context_path = get_context_cache_path(
+                                movie.title, movie.year
+                            )
+
                             # Ensure the context is saved before editing
                             if not context_path.exists():
                                 save_context_cache(context, movie.title, movie.year)
-                            
+
                             # Get the editor from environment or default
-                            editor = os.environ.get('EDITOR', 'nano' if sys.platform != 'win32' else 'notepad')
-                            
+                            editor = os.environ.get(
+                                "EDITOR",
+                                "nano" if sys.platform != "win32" else "notepad",
+                            )
+
                             try:
-                                console.print(f"[blue]Opening {context_path} with {editor}...[/blue]")
+                                console.print(
+                                    f"[blue]Opening {context_path} with {editor}...[/blue]"
+                                )
                                 subprocess.run([editor, str(context_path)], check=True)
-                                
+
                                 # Reload the context after editing
-                                edited_context = load_cached_context(movie.title, movie.year)
+                                edited_context = load_cached_context(
+                                    movie.title, movie.year
+                                )
                                 if edited_context:
                                     context = edited_context
-                                    console.print("[green]Context reloaded after editing[/green]")
-                                    
+                                    console.print(
+                                        "[green]Context reloaded after editing[/green]"
+                                    )
+
                                     # Show the edited context
-                                    json_content = JSON.from_data(context.raw_json, indent=2)
+                                    json_content = JSON.from_data(
+                                        context.raw_json, indent=2
+                                    )
                                     panel = Panel(
                                         json_content,
                                         title=f"Edited Context for {movie.title} ({movie.year})",
                                         title_align="left",
-                                        border_style="green"
+                                        border_style="green",
                                     )
                                     console.print(panel)
-                                    
+
                                     # Ask again what to do
-                                    console.print("\n[yellow]Continue with translation (Pass 2)? [Y/n][/yellow]")
+                                    console.print(
+                                        "\n[yellow]Continue with translation (Pass 2)? [Y/n][/yellow]"
+                                    )
                                     response = input("> ").strip().lower()
                                 else:
-                                    console.print("[red]Failed to reload edited context, using original[/red]")
+                                    console.print(
+                                        "[red]Failed to reload edited context, using original[/red]"
+                                    )
                             except subprocess.CalledProcessError:
-                                console.print(f"[red]Failed to open editor '{editor}'[/red]")
+                                console.print(
+                                    f"[red]Failed to open editor '{editor}'[/red]"
+                                )
                             except FileNotFoundError:
-                                console.print(f"[red]Editor '{editor}' not found. Please set EDITOR environment variable.[/red]")
+                                console.print(
+                                    f"[red]Editor '{editor}' not found. Please set EDITOR environment variable.[/red]"
+                                )
                             except Exception as e:
                                 console.print(f"[red]Error editing context: {e}[/red]")
                     else:
-                        console.print("[yellow]No differences found or no cached context available[/yellow]")
+                        console.print(
+                            "[yellow]No differences found or no cached context available[/yellow]"
+                        )
                         # Ask again what to do
-                        console.print("\n[yellow]Continue with translation (Pass 2)? [Y/n/e][/yellow]")
+                        console.print(
+                            "\n[yellow]Continue with translation (Pass 2)? [Y/n/e][/yellow]"
+                        )
                         console.print("[dim]Y=yes, n=no, e=edit current context[/dim]")
                         response = input("> ").strip().lower()
-                        
+
                         if response == "e":
                             # Edit the context JSON file
                             import os
                             import subprocess
                             import sys
-                            
-                            context_path = get_context_cache_path(movie.title, movie.year)
-                            
+
+                            context_path = get_context_cache_path(
+                                movie.title, movie.year
+                            )
+
                             # Ensure the context is saved before editing
                             if not context_path.exists():
                                 save_context_cache(context, movie.title, movie.year)
-                            
+
                             # Get the editor from environment or default
-                            editor = os.environ.get('EDITOR', 'nano' if sys.platform != 'win32' else 'notepad')
-                            
+                            editor = os.environ.get(
+                                "EDITOR",
+                                "nano" if sys.platform != "win32" else "notepad",
+                            )
+
                             try:
-                                console.print(f"[blue]Opening {context_path} with {editor}...[/blue]")
+                                console.print(
+                                    f"[blue]Opening {context_path} with {editor}...[/blue]"
+                                )
                                 subprocess.run([editor, str(context_path)], check=True)
-                                
+
                                 # Reload the context after editing
-                                edited_context = load_cached_context(movie.title, movie.year)
+                                edited_context = load_cached_context(
+                                    movie.title, movie.year
+                                )
                                 if edited_context:
                                     context = edited_context
-                                    console.print("[green]Context reloaded after editing[/green]")
-                                    
+                                    console.print(
+                                        "[green]Context reloaded after editing[/green]"
+                                    )
+
                                     # Show the edited context
-                                    json_content = JSON.from_data(context.raw_json, indent=2)
+                                    json_content = JSON.from_data(
+                                        context.raw_json, indent=2
+                                    )
                                     panel = Panel(
                                         json_content,
                                         title=f"Edited Context for {movie.title} ({movie.year})",
                                         title_align="left",
-                                        border_style="green"
+                                        border_style="green",
                                     )
                                     console.print(panel)
-                                    
+
                                     # Ask again what to do
-                                    console.print("\n[yellow]Continue with translation (Pass 2)? [Y/n][/yellow]")
+                                    console.print(
+                                        "\n[yellow]Continue with translation (Pass 2)? [Y/n][/yellow]"
+                                    )
                                     response = input("> ").strip().lower()
                                 else:
-                                    console.print("[red]Failed to reload edited context, using original[/red]")
+                                    console.print(
+                                        "[red]Failed to reload edited context, using original[/red]"
+                                    )
                             except subprocess.CalledProcessError:
-                                console.print(f"[red]Failed to open editor '{editor}'[/red]")
+                                console.print(
+                                    f"[red]Failed to open editor '{editor}'[/red]"
+                                )
                             except FileNotFoundError:
-                                console.print(f"[red]Editor '{editor}' not found. Please set EDITOR environment variable.[/red]")
+                                console.print(
+                                    f"[red]Editor '{editor}' not found. Please set EDITOR environment variable.[/red]"
+                                )
                             except Exception as e:
                                 console.print(f"[red]Error editing context: {e}[/red]")
-                
+
                 if response and response not in ["y", "yes", ""]:
                     console.print("[yellow]Translation cancelled by user.[/yellow]")
                     return False
@@ -503,7 +571,7 @@ def main():
     success_count = 0
     # Show context if processing only one movie
     show_context = len(selected) == 1 and not args.extract_only and not config.dry_run
-    
+
     for movie in selected:
         if process_movie(
             movie,

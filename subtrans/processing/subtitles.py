@@ -52,20 +52,22 @@ def find_external_srt(movie_path: str | Path, lang: str = "en") -> Path | None:
         f"*.{lang}.srt",  # movie.en.srt
         f"*.{lang.upper()}.srt",  # movie.EN.srt
     ]
-    
+
     # More specific patterns for English language
     if lang.lower() == "en":
-        lang_patterns.extend([
-            "*.[Ee]ng*.srt",  # movie.eng.srt, movie.english.srt
-            "*.[Ee]nglish*.srt",  # movie.english.srt
-        ])
-    
+        lang_patterns.extend(
+            [
+                "*.[Ee]ng*.srt",  # movie.eng.srt, movie.english.srt
+                "*.[Ee]nglish*.srt",  # movie.english.srt
+            ]
+        )
+
     # Check language-specific patterns first
     for pattern in lang_patterns:
         matches = list(movie_dir.glob(pattern))
         if matches:
             return matches[0]
-    
+
     # Only use fallback pattern if no language-specific file exists
     # This returns None if there are only non-English files
     all_srts = list(movie_dir.glob("*.srt"))

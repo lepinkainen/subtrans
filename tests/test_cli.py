@@ -115,13 +115,12 @@ def test_extract_only_handles_missing_subtitle():
 def test_show_context_functionality():
     """Test that show_context parameter exists in function signature."""
     from subtrans.cli import process_movie
-    from subtrans.core.models import Movie
     import inspect
 
     # Verify show_context parameter exists
     sig = inspect.signature(process_movie)
-    assert 'show_context' in sig.parameters
-    assert sig.parameters['show_context'].default is False
+    assert "show_context" in sig.parameters
+    assert sig.parameters["show_context"].default is False
 
 
 def test_normal_mode_requires_client():

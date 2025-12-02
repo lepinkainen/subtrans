@@ -1,9 +1,13 @@
 """Translation logic using OpenAI GPT models."""
 
 import json
+import time
+from collections.abc import Callable
+from typing import Any, cast
 
 import pysrt
 from openai import OpenAI, RateLimitError
+from openai.types.chat.chat_completion import ChatCompletion
 from rich.progress import (
     Progress,
     SpinnerColumn,
@@ -14,6 +18,71 @@ from rich.progress import (
 
 from ..core.models import TranslationContext
 from ..core.utils import console
+
+
+# Allow overriding in tests to avoid sleeps
+def _sleep(seconds: float) -> None:
+    time.sleep(seconds)
+
+
+def _retry_delay_from_error(error: RateLimitError, fallback: float) -> float:
+    """Extract Retry-After header if available, otherwise use fallback."""
+    try:
+        headers = getattr(error, "response", None)
+        header_dict = getattr(headers, "headers", {}) if headers else {}
+        retry_after = header_dict.get("retry-after") or header_dict.get("Retry-After")
+        if retry_after:
+            return float(retry_after)
+    except Exception:
+        # If anything goes wrong, just fall back to default
+        pass
+    return fallback
+
+
+def _call_with_retries(
+    request_fn: Callable[[], Any],
+    *,
+    max_attempts: int = 3,
+    backoff_base: float = 1.0,
+) -> Any:
+    """
+    Call an OpenAI request function with bounded retries and exponential backoff.
+    Raises the last exception if all attempts fail.
+    """
+    from openai import RateLimitError
+
+    last_exception: RateLimitError | Exception | None = None
+
+    for attempt in range(max_attempts):
+        try:
+            return request_fn()
+        except RateLimitError as e:
+            last_exception = e
+            if attempt == max_attempts - 1:
+                raise
+            delay = _retry_delay_from_error(e, backoff_base * (2**attempt))
+            console.print(
+                f"[yellow]Rate limit hit. Retrying in {delay:.1f}s "
+                f"({attempt + 1}/{max_attempts})[/yellow]"
+            )
+            _sleep(delay)
+        except Exception as e:
+            last_exception = e
+            if attempt == max_attempts - 1:
+                raise
+            delay = backoff_base * (2**attempt)
+            console.print(
+                f"[yellow]OpenAI request failed ({e}); retrying in {delay:.1f}s "
+                f"({attempt + 1}/{max_attempts})[/yellow]"
+            )
+            _sleep(delay)
+
+    # Should not reach here, but raise last exception to be safe
+    if last_exception:
+        raise last_exception
+
+    # This should never be reached, but mypy needs it
+    raise RuntimeError("Unexpected error: all attempts failed without raising")
 
 
 def analyze_subtitles(
@@ -99,20 +168,24 @@ Return a JSON object with:
 Focus on consistency - the goal is to make sure the same names/terms are translated the same way throughout."""
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": f"You are analyzing subtitles for: {movie_title}",
-                },
-                {
-                    "role": "user",
-                    "content": f"{analysis_prompt}\n\nSubtitles:\n{full_text}",
-                },
-            ],
-            response_format={"type": "json_object"},
+        response = _call_with_retries(
+            lambda: client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"You are analyzing subtitles for: {movie_title}",
+                    },
+                    {
+                        "role": "user",
+                        "content": f"{analysis_prompt}\n\nSubtitles:\n{full_text}",
+                    },
+                ],
+                response_format={"type": "json_object"},
+                timeout=60,
+            )
         )
+        response = cast(ChatCompletion, response)
 
         content = response.choices[0].message.content
         if content is None:
@@ -356,62 +429,84 @@ Use "---" as separator between subtitles."""
             elif i + batch_size >= len(subs):
                 position_note = "(End of movie)\n\n"
 
-            try:
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {
-                            "role": "user",
-                            "content": f"{position_note}Translate to {target_lang}:\n\n{input_text}",
-                        },
-                    ],
-                )
+            translations: list[str] | None = None
 
-                content = response.choices[0].message.content
-                if content is None:
-                    raise ValueError(
-                        "OpenAI API returned empty content for translation"
+            for attempt in range(2):
+                try:
+                    response = _call_with_retries(
+                        lambda: client.chat.completions.create(
+                            model=model,
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                {
+                                    "role": "user",
+                                    "content": f"{position_note}Translate to {target_lang}:\n\n{input_text}",
+                                },
+                            ],
+                            timeout=60,
+                        )
                     )
-                translated_text = content.strip()
-                translations = translated_text.split("\n---\n")
+                    response = cast(ChatCompletion, response)
 
-                # Handle case where model doesn't use separator
-                if len(translations) == 1 and len(batch) > 1:
-                    # Try splitting by newlines
-                    translations = [
-                        t.strip() for t in translated_text.split("\n") if t.strip()
-                    ]
+                    content = response.choices[0].message.content
+                    if content is None:
+                        raise ValueError(
+                            "OpenAI API returned empty content for translation"
+                        )
+                    translated_text = content.strip()
+                    translations = translated_text.split("\n---\n")
 
+                    # Handle case where model doesn't use separator
+                    if len(translations) == 1 and len(batch) > 1:
+                        # Try splitting by newlines
+                        translations = [
+                            t.strip() for t in translated_text.split("\n") if t.strip()
+                        ]
+
+                    if len(translations) != len(batch):
+                        raise ValueError(
+                            f"Expected {len(batch)} translations, got {len(translations)}"
+                        )
+
+                    break
+
+                except RateLimitError as e:
+                    batch_num = i // batch_size + 1
+                    console.print(
+                        f"\n[red]OpenAI API quota exceeded at batch {batch_num}![/red]\n"
+                        "You have exceeded your current OpenAI API quota.\n"
+                        "Please check your plan and billing details at:\n"
+                        "https://platform.openai.com/account/billing\n\n"
+                        f"Progress: {batch_num - 1}/{total_batches} batches completed.\n"
+                    )
+                    raise SystemExit(1) from e
+                except Exception as e:
+                    translations = None
+                    if attempt == 1:
+                        console.print(
+                            f"[red]Translation error in batch {i // batch_size + 1}: {e}[/red]"
+                        )
+                    else:
+                        delay = min(2**attempt, 5)
+                        console.print(
+                            f"[yellow]Retrying batch {i // batch_size + 1} after error: {e}[/yellow]"
+                        )
+                        _sleep(delay)
+
+            if translations is None:
+                # Keep original text on error
+                for sub in batch:
+                    translated.append(sub)
+            else:
                 # Create translated subtitle items
                 for j, sub in enumerate(batch):
                     new_sub = pysrt.SubRipItem(
                         index=sub.index,
                         start=sub.start,
                         end=sub.end,
-                        text=translations[j].strip()
-                        if j < len(translations)
-                        else sub.text,
+                        text=translations[j].strip(),
                     )
                     translated.append(new_sub)
-
-            except RateLimitError as e:
-                batch_num = i // batch_size + 1
-                console.print(
-                    f"\n[red]OpenAI API quota exceeded at batch {batch_num}![/red]\n"
-                    "You have exceeded your current OpenAI API quota.\n"
-                    "Please check your plan and billing details at:\n"
-                    "https://platform.openai.com/account/billing\n\n"
-                    f"Progress: {batch_num - 1}/{total_batches} batches completed.\n"
-                )
-                raise SystemExit(1) from e
-            except Exception as e:
-                console.print(
-                    f"[red]Translation error in batch {i // batch_size + 1}: {e}[/red]"
-                )
-                # Keep original text on error
-                for sub in batch:
-                    translated.append(sub)
 
             progress.update(task, advance=1)
 

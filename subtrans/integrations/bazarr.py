@@ -110,7 +110,7 @@ def get_wanted_movies(
             # Note: We no longer filter out movies based on source language availability
             # since many movies have embedded subtitles in MKV files that Bazarr doesn't track
             # The source subtitle check will happen during movie processing
-            
+
             # Note: path will be empty here, we'll fetch it after user selection
             movies.append(
                 Movie(

@@ -65,14 +65,14 @@ def test_find_external_srt_english_pattern(tmp_path):
 
 
 def test_find_external_srt_fallback(tmp_path):
-    """Should fallback to any SRT if no English found."""
+    """Should return None when SRT exists but doesn't match language pattern."""
     from subtrans.processing.subtitles import find_external_srt
 
     (tmp_path / "movie.srt").touch()
 
     result = find_external_srt(tmp_path)
-    assert result is not None
-    assert result.name == "movie.srt"
+    # Returns None to trigger embedded subtitle search
+    assert result is None
 
 
 def test_find_external_srt_not_found(tmp_path):
