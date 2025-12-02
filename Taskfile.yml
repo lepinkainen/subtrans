@@ -1,0 +1,54 @@
+version: '3'
+
+vars:
+  BUILD_DIR: build
+  PROJECT_NAME: subtrans
+  VERSION: 0.1.0
+
+tasks:
+  build:
+    desc: Build Python package artifacts
+    deps: [lint, test]
+    silent: true
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+      - uv build --wheel --sdist --out-dir {{.BUILD_DIR}} --quiet
+
+  build-linux:
+    desc: Build artifacts for Linux (run on a Linux host)
+    deps: [lint, test]
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+      - uv build --wheel --sdist --out-dir {{.BUILD_DIR}}
+
+  build-ci:
+    desc: Build artifacts in CI
+    deps: [lint, test-ci]
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+      - uv build --wheel --sdist --out-dir {{.BUILD_DIR}}
+
+  test:
+    desc: Run tests
+    silent: true
+    cmds:
+      - uv run python -m pytest --ignore=llm-shared -q -p no:warnings
+
+  test-ci:
+    desc: Run tests with coverage for CI
+    cmds:
+      - uv run python -m pytest --ignore=llm-shared --cov=subtrans --cov-report=xml --cov-report=term
+
+  lint:
+    desc: Run linters and type checks
+    silent: true
+    cmds:
+      - uv run ruff check . --exclude llm-shared --quiet
+      - uv run ruff format . --check --exclude llm-shared --quiet
+      - uv run mypy . --exclude llm-shared --no-error-summary
+
+  clean:
+    desc: Clean build and cache artifacts
+    cmds:
+      - rm -rf {{.BUILD_DIR}} .mypy_cache .ruff_cache .pytest_cache
+      - mkdir -p {{.BUILD_DIR}}
