@@ -29,18 +29,18 @@ def save_finnish_subtitle(
     """
     if mkv_path:
         # Use MKV filename as base
-        output_path = mkv_path.with_suffix("").with_suffix(".fi.srt")
+        output_path = mkv_path.parent / f"{mkv_path.stem}.fi.srt"
     else:
         # Use movie directory
         movie_dir = Path(movie_path)
         if movie_dir.is_file():
-            output_path = movie_dir.with_suffix("").with_suffix(".fi.srt")
+            output_path = movie_dir.parent / f"{movie_dir.stem}.fi.srt"
         else:
             # Find any video file
             for ext in [".mkv", ".mp4", ".avi"]:
                 videos = list(movie_dir.glob(f"*{ext}"))
                 if videos:
-                    output_path = videos[0].with_suffix("").with_suffix(".fi.srt")
+                    output_path = videos[0].parent / f"{videos[0].stem}.fi.srt"
                     break
             else:
                 output_path = movie_dir / "movie.fi.srt"
