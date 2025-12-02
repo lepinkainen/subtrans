@@ -40,11 +40,11 @@ tasks:
       - uv run python -m pytest --ignore=llm-shared --cov=subtrans --cov-report=xml --cov-report=term
 
   lint:
-    desc: Run linters and type checks
+    desc: Run linters and type checks with auto-fix
     silent: true
     cmds:
-      - uv run ruff check . --exclude llm-shared --quiet
-      - uv run ruff format . --check --exclude llm-shared --quiet
+      - uv run ruff check . --exclude llm-shared --quiet --fix
+      - uv run ruff format . --exclude llm-shared --quiet
       - uv run mypy . --exclude llm-shared --no-error-summary
 
   clean:
