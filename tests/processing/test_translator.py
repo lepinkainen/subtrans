@@ -33,7 +33,7 @@ def test_analyze_subtitles_quota_error_exits_gracefully():
 
     # Should exit with SystemExit
     with pytest.raises(SystemExit) as exc_info:
-        analyze_subtitles(subs, mock_client, "Test Movie", model="gpt-4")
+        analyze_subtitles(subs, mock_client, "Test Movie", model="gpt-4o")
 
     assert exc_info.value.code == 1
 
@@ -77,7 +77,7 @@ def test_translate_subtitles_batch_quota_error_exits_gracefully():
             "Test Movie",
             context=context,
             batch_size=50,
-            model="gpt-4",
+            model="gpt-4o",
         )
 
     assert exc_info.value.code == 1
@@ -102,7 +102,7 @@ def test_translate_subtitles_batch_other_errors_continue():
 
     # Should not raise, but return original text
     result = translate_subtitles_batch(
-        subs, mock_client, "Test Movie", context=None, batch_size=50, model="gpt-4"
+        subs, mock_client, "Test Movie", context=None, batch_size=50, model="gpt-4o"
     )
 
     # Should have same number of subtitles

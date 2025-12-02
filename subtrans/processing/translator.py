@@ -20,7 +20,7 @@ def analyze_subtitles(
     subs: pysrt.SubRipFile,
     client: OpenAI,
     movie_title: str,
-    model: str = "gpt-4",
+    model: str = "gpt-4o",
     source_lang: str = "en",
     target_lang: str = "fi",
 ) -> TranslationContext:
@@ -53,8 +53,9 @@ Return a JSON object with:
         "CharacterName": "keep|translate|note",
         // For each character, indicate:
         // - "keep" if name should stay in English (e.g., "Jack" -> "Jack")
-        // - "translate" if there's a Finnish equivalent (e.g., "John" -> "Juha")
+        // - "translate" if there's a commonly used Finnish equivalent (e.g., "Charles" -> "Kaarle" when discussing royalty)
         // - Or provide the Finnish version/note (e.g., "Johnny" -> "kept as Johnny, nicknamed 'Joni' by friends")
+        // Typically first names are kept, but historical or royal names may be translated
     },
     "places": {
         "PlaceName": "keep|Finnish equivalent|note"
@@ -269,7 +270,7 @@ def translate_subtitles_batch(
     movie_title: str,
     context: TranslationContext | None = None,
     batch_size: int = 50,
-    model: str = "gpt-4",
+    model: str = "gpt-4o",
     source_lang: str = "en",
     target_lang: str = "fi",
 ) -> pysrt.SubRipFile:

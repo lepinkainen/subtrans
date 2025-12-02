@@ -48,6 +48,8 @@ uv run subtrans --extract-only
 uv run subtrans -e
 ```
 
+**Single Movie Context Review**: When processing only one movie (not in extract-only or dry-run mode), the tool will display the extracted context from Pass 1 in a pretty-printed JSON format and wait for your approval before proceeding to translation. This allows you to review and potentially edit the character names, places, and terminology before the expensive translation pass.
+
 ### Configuration File (config.yml)
 All settings are managed via YAML config file:
 
@@ -316,6 +318,7 @@ path_mappings:
    - Check context cache first (by movie title/year)
    - Run analysis with `gpt-4o` if not cached
    - Save context if `save_context=True`
+   - **NEW**: When processing only one movie, display context in pretty-printed JSON format and wait for user acceptance before continuing
 7. **Pass 2**: Translate subtitles with `gpt-4o-mini` using context
 8. Save Finnish subtitle output (with fallback to cache on write error)
 9. Return success/failure status

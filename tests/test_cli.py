@@ -112,6 +112,18 @@ def test_extract_only_handles_missing_subtitle():
         assert result is False
 
 
+def test_show_context_functionality():
+    """Test that show_context parameter exists in function signature."""
+    from subtrans.cli import process_movie
+    from subtrans.core.models import Movie
+    import inspect
+
+    # Verify show_context parameter exists
+    sig = inspect.signature(process_movie)
+    assert 'show_context' in sig.parameters
+    assert sig.parameters['show_context'].default is False
+
+
 def test_normal_mode_requires_client():
     """Should require OpenAI client when not in extract-only mode."""
     from subtrans.cli import process_movie
@@ -137,6 +149,7 @@ def test_normal_mode_requires_client():
             client=None,
             extract_only=False,  # Explicitly False
             dry_run=True,  # Use dry_run to avoid needing full setup
+            show_context=False,  # Explicitly set to False
         )
 
         assert result is False  # Fails due to missing subtitle
