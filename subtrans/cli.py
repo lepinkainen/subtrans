@@ -85,6 +85,7 @@ def process_movie(
     skip_analysis: bool = False,
     save_context: bool = True,
     path_mappings: list[tuple[str, str]] | None = None,
+    extract_only: bool = False,
 ) -> bool:
     """
     Process a single movie: get subtitle, analyze, translate, save.
@@ -99,6 +100,7 @@ def process_movie(
         skip_analysis: Skip context analysis pass
         save_context: Save analysis context to cache
         path_mappings: Path mappings for NAS to local translation
+        extract_only: If True, extract and cache subtitles only (no translation)
 
     Returns:
         True if processing succeeded, False otherwise
@@ -134,6 +136,10 @@ def process_movie(
             return False
 
     console.print(f"[green]Loaded {len(subs)} subtitle entries[/green]")
+
+    if extract_only:
+        console.print("[yellow]Extract-only mode - subtitle cached successfully[/yellow]")
+        return True
 
     if dry_run:
         console.print("[yellow]Dry run - skipping translation[/yellow]")
@@ -191,6 +197,12 @@ def main():
         default=Path("config.yml"),
         help="Path to config file (default: config.yml)",
     )
+    parser.add_argument(
+        "--extract-only",
+        "-e",
+        action="store_true",
+        help="Extract and cache subtitles only (no translation)",
+    )
 
     args = parser.parse_args()
 
@@ -199,19 +211,23 @@ def main():
 
     # Display config info
     console.print(f"[blue]Bazarr URL: {config.bazarr_url}[/blue]")
-    console.print(f"[blue]Analysis model: {config.analysis_model}[/blue]")
-    console.print(f"[blue]Translation model: {config.translation_model}[/blue]")
-    console.print(f"[blue]Batch size: {config.batch_size}[/blue]")
+
+    if args.extract_only:
+        console.print("[yellow]Extract-only mode: Subtitles will be cached without translation[/yellow]")
+    else:
+        console.print(f"[blue]Analysis model: {config.analysis_model}[/blue]")
+        console.print(f"[blue]Translation model: {config.translation_model}[/blue]")
+        console.print(f"[blue]Batch size: {config.batch_size}[/blue]")
 
     if config.path_mappings:
         console.print("[blue]Path mappings:[/blue]")
         for from_path, to_path in config.path_mappings:
             console.print(f"  {from_path} -> {to_path}")
 
-    # Get OpenAI API key from environment
+    # Get OpenAI API key from environment (not needed for extract-only mode)
     api_key = os.environ.get("OPENAI_API_KEY")
 
-    if not api_key and not config.dry_run:
+    if not api_key and not config.dry_run and not args.extract_only:
         console.print(
             "[red]OPENAI_API_KEY environment variable not set[/red]"
         )
@@ -258,6 +274,7 @@ def main():
             skip_analysis=config.skip_analysis,
             save_context=config.save_context,
             path_mappings=config.path_mappings if config.path_mappings else None,
+            extract_only=args.extract_only,
         ):
             success_count += 1
 

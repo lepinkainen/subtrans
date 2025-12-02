@@ -41,6 +41,11 @@ uv run subtrans
 # Use a different config file
 uv run subtrans --config /path/to/other-config.yml
 uv run subtrans -c custom-config.yml
+
+# Extract and cache subtitles only (no translation)
+# Useful for batch pre-population of the cache
+uv run subtrans --extract-only
+uv run subtrans -e
 ```
 
 ### Configuration File (config.yml)
@@ -282,10 +287,10 @@ path_mappings:
 ### CLI Orchestration
 
 **Main workflow** (`cli.py:main()`):
-1. Parse command-line arguments (`--config`, `-c`)
+1. Parse command-line arguments (`--config`, `-c`, `--extract-only`, `-e`)
 2. Load configuration from YAML
 3. Display configuration info (Bazarr URL, models, batch size, path mappings)
-4. Check `OPENAI_API_KEY` environment variable
+4. Check `OPENAI_API_KEY` environment variable (skipped if `--extract-only`)
 5. Fetch wanted movies from Bazarr
 6. Interactive movie selection with rich table
 7. Fetch full paths for selected movies
@@ -296,14 +301,15 @@ path_mappings:
 1. Apply path mappings (NAS → local)
 2. Find English subtitle (external SRT or MKV extraction with caching)
 3. Load subtitle with UTF-8 (fallback to latin-1 encoding)
-4. Skip processing if `dry_run` mode enabled
-5. **Pass 1**: Analyze for context (unless `skip_analysis=True`)
+4. **If `extract_only=True`**: Return success (subtitle is now cached)
+5. Skip processing if `dry_run` mode enabled
+6. **Pass 1**: Analyze for context (unless `skip_analysis=True`)
    - Check context cache first (by movie title/year)
    - Run analysis with `gpt-4o` if not cached
    - Save context if `save_context=True`
-6. **Pass 2**: Translate subtitles with `gpt-4o-mini` using context
-7. Save Finnish subtitle output (with fallback to cache on write error)
-8. Return success/failure status
+7. **Pass 2**: Translate subtitles with `gpt-4o-mini` using context
+8. Save Finnish subtitle output (with fallback to cache on write error)
+9. Return success/failure status
 
 **Interactive features** (`cli.py:select_movies_interactive()`):
 - Displays rich table with movie info (title, year, missing subtitles)
@@ -433,6 +439,25 @@ uv run subtrans
 # > Found 15 movies missing Finnish subtitles
 # > Enter movie numbers: 1,3,5
 # > Processing 3 movies...
+```
+
+### Batch extraction mode
+```bash
+# Extract and cache all subtitles without translation
+# Useful for pre-populating cache, no OpenAI API key required
+uv run subtrans --extract-only
+
+# Example interaction:
+# > Found 50 movies missing Finnish subtitles
+# > Enter movie numbers: all
+# > Extract-only mode - subtitle cached successfully
+# > Completed: 50/50 movies processed
+
+# Benefits:
+# - Run overnight to populate cache for entire library
+# - No OpenAI API costs during extraction
+# - Faster translation runs later (subtitles already cached)
+# - Can extract while on NAS network, translate offline later
 ```
 
 ### Debugging/development
