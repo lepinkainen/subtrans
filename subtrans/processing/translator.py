@@ -113,10 +113,15 @@ Focus on consistency - the goal is to make sure the same names/terms are transla
             response_format={"type": "json_object"},
         )
 
-        result = json.loads(response.choices[0].message.content)
+        content = response.choices[0].message.content
+        if content is None:
+            raise ValueError("OpenAI API returned empty content for analysis")
+        result = json.loads(content)
 
         # Extract formality: use formality_recommendation for Finnish, formality_guidance for others
-        formality = result.get("formality_recommendation") or result.get("formality_guidance")
+        formality = result.get("formality_recommendation") or result.get(
+            "formality_guidance"
+        )
 
         console.print(
             f"[green]Found {len(result.get('characters', {}))} characters, "
@@ -289,7 +294,9 @@ def translate_subtitles_batch(
 
     # Build prompt with or without context
     if context:
-        system_prompt = build_translation_prompt(movie_title, context, source_lang, target_lang)
+        system_prompt = build_translation_prompt(
+            movie_title, context, source_lang, target_lang
+        )
     else:
         # Fallback prompt when no context is available
         if source_lang == "en" and target_lang == "fi":
@@ -332,7 +339,7 @@ Use "---" as separator between subtitles."""
         TimeRemainingColumn(),
         console=console,
     ) as progress:
-        task = progress.add_task(f"Translating", total=total_batches)
+        task = progress.add_task("Translating", total=total_batches)
 
         for i in range(0, len(subs), batch_size):
             batch = subs[i : i + batch_size]
@@ -360,7 +367,12 @@ Use "---" as separator between subtitles."""
                     ],
                 )
 
-                translated_text = response.choices[0].message.content.strip()
+                content = response.choices[0].message.content
+                if content is None:
+                    raise ValueError(
+                        "OpenAI API returned empty content for translation"
+                    )
+                translated_text = content.strip()
                 translations = translated_text.split("\n---\n")
 
                 # Handle case where model doesn't use separator

@@ -17,6 +17,32 @@ subtrans = "subtrans.cli:main"
 
 [project.optional-dependencies]
 dev = [
+    "mypy>=1.13.0",
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
+    "ruff>=0.6.9",
 ]
+
+[tool.uv]
+package = true
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.1",
+    "pytest-cov>=7.0.0",
+    "types-pyyaml>=6.0.12.20250915",
+]
+
+[tool.mypy]
+python_version = "3.14"
+python_executable = ".venv/bin/python3"
+exclude = [
+    "^build/",
+    "^dist/",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "pysrt",
+]
+ignore_missing_imports = true
