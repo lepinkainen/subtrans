@@ -3,7 +3,7 @@
 import json
 
 import pysrt
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 from rich.progress import (
     Progress,
     SpinnerColumn,
@@ -105,6 +105,14 @@ Focus on consistency - the goal is to make sure the same names/terms are transla
             raw_json=result,
         )
 
+    except RateLimitError as e:
+        console.print(
+            "[red]OpenAI API quota exceeded![/red]\n"
+            "You have exceeded your current OpenAI API quota.\n"
+            "Please check your plan and billing details at:\n"
+            "https://platform.openai.com/account/billing\n"
+        )
+        raise SystemExit(1) from e
     except Exception as e:
         console.print(
             f"[yellow]Analysis failed: {e}. Proceeding without context.[/yellow]"
@@ -285,6 +293,16 @@ Use "---" as separator between subtitles."""
                     )
                     translated.append(new_sub)
 
+            except RateLimitError as e:
+                batch_num = i // batch_size + 1
+                console.print(
+                    f"\n[red]OpenAI API quota exceeded at batch {batch_num}![/red]\n"
+                    "You have exceeded your current OpenAI API quota.\n"
+                    "Please check your plan and billing details at:\n"
+                    "https://platform.openai.com/account/billing\n\n"
+                    f"Progress: {batch_num - 1}/{total_batches} batches completed.\n"
+                )
+                raise SystemExit(1) from e
             except Exception as e:
                 console.print(
                     f"[red]Translation error in batch {i // batch_size + 1}: {e}[/red]"
