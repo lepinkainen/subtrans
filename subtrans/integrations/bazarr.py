@@ -66,8 +66,9 @@ def get_wanted_movies(
     """
     Fetch movies missing target language subtitles from Bazarr.
 
-    Only returns movies that have source language subtitles available
-    for translation.
+    Returns all movies missing target language subtitles, regardless of whether
+    they have source language subtitles tracked in Bazarr. The actual source
+    subtitle check (including embedded MKV subtitles) happens during processing.
 
     Args:
         base_url: Bazarr server URL
@@ -77,7 +78,6 @@ def get_wanted_movies(
 
     Returns:
         List of Movie objects with missing target language subtitles
-        and available source language subtitles
 
     Raises:
         SystemExit: If API request fails
@@ -107,19 +107,10 @@ def get_wanted_movies(
             lang == target_lang or lang.startswith(target_lang)
             for lang in missing_langs
         ):
-            # Check for source language availability
-            existing_subs = item.get("subtitles", [])
-            has_source, found_langs = _has_source_subtitle(existing_subs, source_lang)
-
-            if not has_source:
-                title = item.get("title", "Unknown")
-                lang_list = ", ".join(found_langs) if found_langs else "none"
-                console.print(
-                    f"[dim]Skipping {title} - no {source_lang.upper()} subtitles "
-                    f"available (found: {lang_list})[/dim]"
-                )
-                continue
-
+            # Note: We no longer filter out movies based on source language availability
+            # since many movies have embedded subtitles in MKV files that Bazarr doesn't track
+            # The source subtitle check will happen during movie processing
+            
             # Note: path will be empty here, we'll fetch it after user selection
             movies.append(
                 Movie(

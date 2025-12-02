@@ -41,23 +41,38 @@ def find_external_srt(movie_path: str | Path, lang: str = "en") -> Path | None:
         lang: Language code to search for (default: "en")
 
     Returns:
-        Path to SRT file, or None if not found
+        Path to SRT file, or None if found
     """
     movie_dir = Path(movie_path)
     if movie_dir.is_file():
         movie_dir = movie_dir.parent
 
-    # Look for subtitle patterns with language code
-    patterns = [
+    # Look for subtitle patterns with language code first
+    lang_patterns = [
         f"*.{lang}.srt",  # movie.en.srt
         f"*.{lang.upper()}.srt",  # movie.EN.srt
-        "*.srt",  # Fallback to any SRT
     ]
-
-    for pattern in patterns:
+    
+    # More specific patterns for English language
+    if lang.lower() == "en":
+        lang_patterns.extend([
+            "*.[Ee]ng*.srt",  # movie.eng.srt, movie.english.srt
+            "*.[Ee]nglish*.srt",  # movie.english.srt
+        ])
+    
+    # Check language-specific patterns first
+    for pattern in lang_patterns:
         matches = list(movie_dir.glob(pattern))
         if matches:
             return matches[0]
+    
+    # Only use fallback pattern if no language-specific file exists
+    # This returns None if there are only non-English files
+    all_srts = list(movie_dir.glob("*.srt"))
+    if all_srts:
+        # If there are SRT files but none match the language, return None
+        # to trigger checking for embedded subtitles
+        return None
 
     return None
 
