@@ -13,7 +13,8 @@ bazarr:
   url: "http://test:6767"
   api_key: "test_key"
 openai:
-  model: "gpt-4"
+  analysis_model: "gpt-4o"
+  translation_model: "gpt-4o-mini"
   batch_size: 50
 translation:
   skip_analysis: false
@@ -27,7 +28,8 @@ path_mappings:
     config = load_config(config_file)
     assert config.bazarr_url == "http://test:6767"
     assert config.bazarr_api_key == "test_key"
-    assert config.openai_model == "gpt-4"
+    assert config.analysis_model == "gpt-4o"
+    assert config.translation_model == "gpt-4o-mini"
     assert config.batch_size == 50
     assert config.path_mappings == [("/volume1/movies", "/mnt/movies")]
     assert config.skip_analysis is False
@@ -54,7 +56,8 @@ bazarr:
   url: "http://test:6767"
   api_key: "test_key"
 openai:
-  model: "gpt-4"
+  analysis_model: "gpt-4o"
+  translation_model: "gpt-4o-mini"
   batch_size: 50
 translation:
   skip_analysis: false

@@ -31,7 +31,8 @@ class Config:
 
     bazarr_url: str
     bazarr_api_key: str
-    openai_model: str
+    analysis_model: str      # Model for Pass 1: Context analysis
+    translation_model: str   # Model for Pass 2: Translation
     batch_size: int
     path_mappings: list[tuple[str, str]]
     skip_analysis: bool

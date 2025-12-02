@@ -40,7 +40,8 @@ def load_config(config_path: Path) -> Config:
     return Config(
         bazarr_url=data["bazarr"]["url"],
         bazarr_api_key=data["bazarr"]["api_key"],
-        openai_model=data["openai"]["model"],
+        analysis_model=data["openai"]["analysis_model"],
+        translation_model=data["openai"]["translation_model"],
         batch_size=data["openai"]["batch_size"],
         path_mappings=path_mappings,
         skip_analysis=data["translation"]["skip_analysis"],

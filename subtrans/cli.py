@@ -78,7 +78,8 @@ def select_movies_interactive(movies: list[Movie]) -> list[Movie]:
 def process_movie(
     movie: Movie,
     client: OpenAI,
-    model: str = "gpt-4",
+    analysis_model: str = "gpt-4o",
+    translation_model: str = "gpt-4o-mini",
     batch_size: int = 50,
     dry_run: bool = False,
     skip_analysis: bool = False,
@@ -91,7 +92,8 @@ def process_movie(
     Args:
         movie: Movie to process
         client: OpenAI client
-        model: OpenAI model to use
+        analysis_model: OpenAI model for Pass 1 (context analysis)
+        translation_model: OpenAI model for Pass 2 (translation)
         batch_size: Number of subtitles per API call
         dry_run: If True, skip translation (for testing)
         skip_analysis: Skip context analysis pass
@@ -145,7 +147,7 @@ def process_movie(
 
         if context is None:
             # No cached context, run analysis
-            context = analyze_subtitles(subs, client, movie.title, model=model)
+            context = analyze_subtitles(subs, client, movie.title, model=analysis_model)
 
             # Optionally save context for review/reuse in cache directory
             if save_context and context.raw_json:
@@ -158,7 +160,7 @@ def process_movie(
         movie.title,
         context=context,
         batch_size=batch_size,
-        model=model,
+        model=translation_model,
     )
 
     # Save translated subtitles
@@ -197,7 +199,8 @@ def main():
 
     # Display config info
     console.print(f"[blue]Bazarr URL: {config.bazarr_url}[/blue]")
-    console.print(f"[blue]Model: {config.openai_model}[/blue]")
+    console.print(f"[blue]Analysis model: {config.analysis_model}[/blue]")
+    console.print(f"[blue]Translation model: {config.translation_model}[/blue]")
     console.print(f"[blue]Batch size: {config.batch_size}[/blue]")
 
     if config.path_mappings:
@@ -248,7 +251,8 @@ def main():
         if process_movie(
             movie,
             client,
-            model=config.openai_model,
+            analysis_model=config.analysis_model,
+            translation_model=config.translation_model,
             batch_size=config.batch_size,
             dry_run=config.dry_run,
             skip_analysis=config.skip_analysis,

@@ -1,0 +1,31 @@
+# Subtitle Translator Configuration
+
+# Bazarr API settings
+bazarr:
+  url: "http://localhost:6767"
+  api_key: "YOUR_BAZARR_API_KEY_HERE"
+
+# OpenAI settings
+# Note: OPENAI_API_KEY must be set as an environment variable
+# Two-model approach for cost optimization:
+# - gpt-4o handles complex context analysis with rule interpretation
+# - gpt-4o-mini performs cost-effective translation guided by context
+openai:
+  analysis_model: "gpt-4o"      # Pass 1: Context analysis (complex rule interpretation)
+  translation_model: "gpt-4o-mini"  # Pass 2: Translation (cost-optimized)
+  batch_size: 50                # Number of subtitles per API call
+
+# Path mappings - Map NAS paths to local mount points
+# Useful when Bazarr runs on NAS but files are accessed via SMB mount
+path_mappings:
+  - from: "/volume1/movies"
+    to: "/Volumes/NAS/movies"
+  # Add more mappings as needed:
+  # - from: "/volume2/films"
+  #   to: "/Volumes/NAS2/films"
+
+# Translation options
+translation:
+  skip_analysis: false      # Skip context analysis for faster translation
+  save_context: true        # Save translation context as JSON
+  dry_run: false           # List movies without translating

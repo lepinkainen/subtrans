@@ -44,7 +44,8 @@ def test_config_dataclass():
     config = Config(
         bazarr_url="http://test:6767",
         bazarr_api_key="test_key",
-        openai_model="gpt-4",
+        analysis_model="gpt-4o",
+        translation_model="gpt-4o-mini",
         batch_size=50,
         path_mappings=[("/volume1", "/mnt")],
         skip_analysis=False,
@@ -53,7 +54,8 @@ def test_config_dataclass():
     )
     assert config.bazarr_url == "http://test:6767"
     assert config.bazarr_api_key == "test_key"
-    assert config.openai_model == "gpt-4"
+    assert config.analysis_model == "gpt-4o"
+    assert config.translation_model == "gpt-4o-mini"
     assert config.batch_size == 50
     assert config.path_mappings == [("/volume1", "/mnt")]
     assert config.skip_analysis is False
