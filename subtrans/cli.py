@@ -253,7 +253,12 @@ def main():
     console.print(
         f"[blue]Fetching movies missing {config.target_language} subtitles from Bazarr...[/blue]"
     )
-    movies = get_wanted_movies(config.bazarr_url, config.bazarr_api_key, config.target_language)
+    movies = get_wanted_movies(
+        config.bazarr_url,
+        config.bazarr_api_key,
+        source_lang=config.source_language,
+        target_lang=config.target_language
+    )
 
     if not movies:
         console.print(f"[yellow]No movies found missing {config.target_language} subtitles.[/yellow]")

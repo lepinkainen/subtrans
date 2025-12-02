@@ -232,7 +232,9 @@ Translated subtitles are saved with Finnish language suffix:
 
 **Movie Discovery** (`integrations/bazarr.py`):
 - Uses Bazarr REST API to query movies with missing subtitles
-- Filters specifically for Finnish (`fi`/`fin`) language
+- Filters for movies missing target language (e.g., Finnish)
+- **Filters to only include movies with source language subtitles available (e.g., English)**
+- **Skips movies without source subtitles with console logging**
 - Interactive movie selection with rich table display
 
 **API endpoints**:
@@ -240,7 +242,14 @@ Translated subtitles are saved with Finnish language suffix:
 - `/api/movies` - Get detailed movie information (including file path)
 
 **Functions**:
-- `get_wanted_movies()`: Fetch and filter movies missing Finnish subtitles
+- `_has_source_subtitle()`: Helper function to check for source language subtitle availability
+  - Checks multiple language code fields (code2, code3, language)
+  - Null-safe handling of missing language codes
+  - Case-insensitive matching with prefix support (handles "en", "eng", "english")
+  - Returns tuple of (has_source, found_language_codes) for filtering and logging
+- `get_wanted_movies()`: Fetch and filter movies missing target language subtitles
+  - Only returns movies with both missing target language AND available source language
+  - Logs skipped movies with detected languages
 - `populate_movie_path()`: Fetch full file path for selected movies
 
 ### Path Mapping

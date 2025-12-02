@@ -5,6 +5,7 @@ Translates English subtitles to Finnish using OpenAI GPT models with context-awa
 ## Features
 
 - **Bazarr Integration**: Automatically finds movies missing Finnish subtitles
+- **Source Language Filtering**: Automatically filters movies to only show those with available source language subtitles
 - **Context-Aware Translation**: Analyzes subtitle content to maintain consistency in character names, terminology, and tone
 - **Two-Pass Approach**: First analyzes context, then translates with full context awareness
 - **Path Mapping**: Maps NAS paths to local mount points for laptop/SMB usage
@@ -51,6 +52,8 @@ uv run main.py
 # Use custom config file
 uv run main.py --config /path/to/config.yml
 ```
+
+**Note**: The tool only displays movies that have both missing target language subtitles and available source language subtitles. Movies without source language subtitles are automatically skipped with a log message.
 
 ## Configuration
 
