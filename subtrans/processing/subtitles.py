@@ -47,13 +47,11 @@ def find_external_srt(movie_path: str | Path, lang: str = "en") -> Path | None:
     if movie_dir.is_file():
         movie_dir = movie_dir.parent
 
-    # Look for English subtitle patterns
+    # Look for subtitle patterns with language code
     patterns = [
-        f"*.{lang}.srt",
-        f"*.{lang.upper()}.srt",
-        "*.[Ee]ng*.srt",
-        "*.[Ee]nglish*.srt",
-        "*.srt",  # Fallback to any SRT
+        f"*.{lang}.srt",            # movie.en.srt
+        f"*.{lang.upper()}.srt",    # movie.EN.srt
+        "*.srt",                    # Fallback to any SRT
     ]
 
     for pattern in patterns:
@@ -138,9 +136,9 @@ def extract_subtitle_from_mkv(mkv_path: Path, track_id: int, output_path: Path) 
         return False
 
 
-def get_english_subtitle(movie: Movie) -> tuple[Path | None, bool]:
+def get_source_subtitle(movie: Movie, source_lang: str = "en") -> tuple[Path | None, bool]:
     """
-    Get English subtitle for a movie.
+    Get source language subtitle for a movie.
 
     Searches for subtitles in this order:
     1. External SRT file
@@ -148,12 +146,13 @@ def get_english_subtitle(movie: Movie) -> tuple[Path | None, bool]:
 
     Args:
         movie: Movie object with path information
+        source_lang: Source language code (ISO 639-1/2)
 
     Returns:
         Tuple of (path_to_srt, is_temporary)
     """
     # First, check for external SRT
-    external_srt = find_external_srt(movie.path, "en")
+    external_srt = find_external_srt(movie.path, source_lang)
     if external_srt and external_srt.exists():
         console.print(f"[green]Found external subtitle: {external_srt.name}[/green]")
         return external_srt, False
@@ -169,33 +168,35 @@ def get_english_subtitle(movie: Movie) -> tuple[Path | None, bool]:
         console.print("[yellow]No text subtitle tracks found in MKV[/yellow]")
         return None, False
 
-    # Find English track
-    english_track = None
+    # Find track matching source language
+    source_track = None
     for track in tracks:
-        if track.language.lower() in ("eng", "en", "english"):
-            english_track = track
+        track_lang = track.language.lower()
+        # Match 2-letter or 3-letter codes (e.g., "en", "eng", "english")
+        if track_lang == source_lang or track_lang.startswith(source_lang):
+            source_track = track
             break
 
-    # If no English track, let user choose or use first track
-    if not english_track:
-        console.print("[yellow]No English track found. Available tracks:[/yellow]")
+    # If no matching track, let user choose or use first track
+    if not source_track:
+        console.print(f"[yellow]No {source_lang} track found. Available tracks:[/yellow]")
         for t in tracks:
             console.print(f"  Track {t.track_id}: {t.language} - {t.name} ({t.codec})")
 
         if len(tracks) == 1:
-            english_track = tracks[0]
+            source_track = tracks[0]
             console.print(
-                f"[yellow]Using only available track: {english_track.language}[/yellow]"
+                f"[yellow]Using only available track: {source_track.language}[/yellow]"
             )
         else:
             # Use first text track as fallback
-            english_track = tracks[0]
+            source_track = tracks[0]
             console.print(
-                f"[yellow]Using first track: {english_track.language}[/yellow]"
+                f"[yellow]Using first track: {source_track.language}[/yellow]"
             )
 
     # Check cache first - use cache module function
-    cached_srt = get_subtitle_cache_path(mkv_path, english_track.track_id)
+    cached_srt = get_subtitle_cache_path(mkv_path, source_track.track_id)
 
     if cached_srt.exists():
         console.print(f"[green]Using cached subtitle[/green]")
@@ -203,9 +204,9 @@ def get_english_subtitle(movie: Movie) -> tuple[Path | None, bool]:
         return cached_srt, False  # Not temporary, it's cached
 
     # Extract to cache
-    console.print(f"[blue]Extracting track {english_track.track_id} from MKV to cache...[/blue]")
+    console.print(f"[blue]Extracting track {source_track.track_id} from MKV to cache...[/blue]")
 
-    if extract_subtitle_from_mkv(mkv_path, english_track.track_id, cached_srt):
+    if extract_subtitle_from_mkv(mkv_path, source_track.track_id, cached_srt):
         console.print(f"[dim]Cached to {cached_srt}[/dim]")
         return cached_srt, False  # Not temporary, it's cached
 

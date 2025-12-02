@@ -15,6 +15,14 @@ openai:
   translation_model: "gpt-4o-mini"  # Pass 2: Translation (cost-optimized)
   batch_size: 50                # Number of subtitles per API call
 
+# Language settings
+# ISO 639-1 language codes (2-letter) for source and target languages
+# English → Finnish uses specialized translation prompts with formality handling
+# Other language pairs use generic translation prompts
+languages:
+  source: "en"      # Source subtitle language (en, es, fr, de, etc.)
+  target: "fi"      # Target translation language (fi, es, de, ja, etc.)
+
 # Path mappings - Map NAS paths to local mount points
 # Useful when Bazarr runs on NAS but files are accessed via SMB mount
 path_mappings:

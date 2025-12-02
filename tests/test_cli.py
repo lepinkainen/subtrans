@@ -28,7 +28,7 @@ Test subtitle
     )
 
     # Mock the subtitle finding
-    with patch("subtrans.cli.get_english_subtitle") as mock_get_sub:
+    with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (srt_path, False)
 
         # Call with extract_only=True
@@ -68,7 +68,7 @@ Second subtitle
         existing_subtitles=[],
     )
 
-    with patch("subtrans.cli.get_english_subtitle") as mock_get_sub:
+    with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (srt_path, False)
 
         result = process_movie(
@@ -95,7 +95,7 @@ def test_extract_only_handles_missing_subtitle():
         existing_subtitles=[],
     )
 
-    with patch("subtrans.cli.get_english_subtitle") as mock_get_sub:
+    with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (None, False)  # Subtitle not found
 
         result = process_movie(
@@ -125,7 +125,7 @@ def test_normal_mode_requires_client():
     # Normal mode (extract_only=False) would fail without proper client
     # This is more of a contract test - actual translation requires OpenAI
     # Just verify the parameter exists and defaults to False
-    with patch("subtrans.cli.get_english_subtitle") as mock_get_sub:
+    with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (None, False)
 
         result = process_movie(

@@ -8,16 +8,17 @@ from ..core.models import Movie
 from ..core.utils import console
 
 
-def get_wanted_movies(base_url: str, api_key: str) -> list[Movie]:
+def get_wanted_movies(base_url: str, api_key: str, target_lang: str = "fi") -> list[Movie]:
     """
-    Fetch movies missing Finnish subtitles from Bazarr.
+    Fetch movies missing target language subtitles from Bazarr.
 
     Args:
         base_url: Bazarr server URL
         api_key: Bazarr API key
+        target_lang: Target language code (ISO 639-1/2)
 
     Returns:
-        List of Movie objects with missing Finnish subtitles
+        List of Movie objects with missing target language subtitles
 
     Raises:
         SystemExit: If API request fails
@@ -38,11 +39,12 @@ def get_wanted_movies(base_url: str, api_key: str) -> list[Movie]:
 
     movies = []
     for item in data.get("data", []):
-        # Check if Finnish (fi) is in the missing subtitles
+        # Check if target language is in the missing subtitles
         missing = item.get("missing_subtitles", [])
         missing_langs = [s.get("code2", s.get("code3", "")) for s in missing]
 
-        if "fi" in missing_langs or "fin" in missing_langs:
+        # Check for both exact match and startswith (handles 2-letter and 3-letter codes)
+        if any(lang == target_lang or lang.startswith(target_lang) for lang in missing_langs):
             # Note: path will be empty here, we'll fetch it after user selection
             movies.append(
                 Movie(

@@ -38,17 +38,19 @@ class Config:
     skip_analysis: bool
     save_context: bool
     dry_run: bool
+    source_language: str = "en"  # ISO 639-1/2 code for source subtitle language
+    target_language: str = "fi"  # ISO 639-1/2 code for target translation language
 
 
 @dataclass
 class TranslationContext:
     """Context extracted from first-pass analysis."""
 
-    characters: dict[str, str]  # English name -> Finnish handling
-    places: dict[str, str]  # English place -> Finnish handling
-    terms: dict[str, str]  # Recurring terms/phrases -> Finnish
+    characters: dict[str, str]  # Source name -> Target language handling
+    places: dict[str, str]  # Source place -> Target language handling
+    terms: dict[str, str]  # Recurring terms/phrases -> Target translation
     genre: str
     tone: str  # formal, informal, mixed
-    formality: str  # te (formal) or sinä (informal)
+    formality: str | None  # Language-specific formality guidance (e.g., "te"/"sinä" for Finnish)
     style_notes: str
     raw_json: dict

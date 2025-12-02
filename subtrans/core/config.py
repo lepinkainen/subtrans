@@ -47,4 +47,6 @@ def load_config(config_path: Path) -> Config:
         skip_analysis=data["translation"]["skip_analysis"],
         save_context=data["translation"]["save_context"],
         dry_run=data["translation"]["dry_run"],
+        source_language=data.get("languages", {}).get("source", "en"),
+        target_language=data.get("languages", {}).get("target", "fi"),
     )
