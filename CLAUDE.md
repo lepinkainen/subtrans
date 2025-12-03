@@ -48,7 +48,7 @@ uv run subtrans --extract-only
 uv run subtrans -e
 ```
 
-**Single Movie Context Review**: When processing only one movie (not in extract-only or dry-run mode), the tool will display the extracted context from Pass 1 in a pretty-printed JSON format and wait for your approval before proceeding to translation. This allows you to review and potentially edit the character names, places, and terminology before the expensive translation pass.
+**Two-Phase Workflow with Context Review**: The tool uses a two-phase workflow where Phase 1 (Context Analysis) processes ALL selected movies first, displaying the extracted context from Pass 1 in a pretty-printed JSON format and waiting for your approval for each movie. Phase 2 (Translation) then translates only the approved movies using their cached contexts. This allows you to review and potentially edit all character names, places, and terminology upfront before the expensive translation pass runs unattended.
 
 ### Configuration File (config.yml)
 All settings are managed via YAML config file:
@@ -305,23 +305,42 @@ path_mappings:
 5. Fetch wanted movies from Bazarr
 6. Interactive movie selection with rich table
 7. Fetch full paths for selected movies
-8. Process each movie with `process_movie()`
-9. Report summary (success count)
+8. **If extract-only mode**: Extract and cache subtitles for all selected movies, then exit
+9. **Phase 1 (Context Analysis)**: Process all selected movies with `process_movie_phase1()`
+   - For each movie: extract subtitle, analyze context, display JSON, wait for user approval
+   - Track approved movies (user can skip movies by declining approval)
+   - Exit if no movies approved
+10. **Phase 2 (Translation)**: Process approved movies with `process_movie_phase2()`
+   - For each approved movie: load cached context, translate, save output
+11. Report summary (success count)
 
-**Movie processing** (`cli.py:process_movie()`):
+**Phase 1 processing** (`cli.py:process_movie_phase1()`):
 1. Apply path mappings (NAS → local)
-2. Find English subtitle (external SRT or MKV extraction with caching)
+2. Find source language subtitle (external SRT or MKV extraction with caching)
 3. Load subtitle with UTF-8 (fallback to latin-1 encoding)
 4. **If `extract_only=True`**: Return success (subtitle is now cached)
 5. Skip processing if `dry_run` mode enabled
-6. **Pass 1**: Analyze for context (unless `skip_analysis=True`)
+6. **Context Analysis** (unless `skip_analysis=True`):
    - Check context cache first (by movie title/year)
    - Run analysis with `gpt-4o` if not cached
    - Save context if `save_context=True`
-   - **NEW**: When processing only one movie, display context in pretty-printed JSON format and wait for user acceptance before continuing
-7. **Pass 2**: Translate subtitles with `gpt-4o-mini` using context
-8. Save Finnish subtitle output (with fallback to cache on write error)
-9. Return success/failure status
+   - **Always display context** in pretty-printed JSON format
+   - Wait for user approval (Y/n/e/d options):
+     - Y: Approve and continue to Phase 2
+     - n: Skip this movie
+     - e: Edit context JSON with $EDITOR, reload, display, ask again
+     - d: Show diff with cached context, then ask again
+7. Return True if approved, False if skipped
+
+**Phase 2 processing** (`cli.py:process_movie_phase2()`):
+1. Apply path mappings (NAS → local)
+2. Find source language subtitle (reload from cache)
+3. Load subtitle with UTF-8 (fallback to latin-1 encoding)
+4. Load cached context from Phase 1 (warn if missing, continue with None)
+5. Skip processing if `dry_run` mode enabled
+6. **Translate** subtitles with `gpt-4o-mini` using cached context
+7. Save target language subtitle output (with fallback to cache on write error)
+8. Return success/failure status
 
 **Interactive features** (`cli.py:select_movies_interactive()`):
 - Displays rich table with movie info (title, year, missing subtitles)
@@ -450,7 +469,38 @@ uv run subtrans
 # Example interaction:
 # > Found 15 movies missing Finnish subtitles
 # > Enter movie numbers: 1,3,5
-# > Processing 3 movies...
+#
+# Phase 1: Context Analysis
+# > Processing: The Matrix (1999)
+# > [Shows context JSON]
+# > Approve this context for translation? [Y/n/e/d]
+# > y
+#
+# > Processing: Inception (2010)
+# > [Shows context JSON]
+# > Approve this context for translation? [Y/n/e/d]
+# > e  (edit context)
+# > [Opens editor, user edits character names]
+# > Approve edited context for translation? [Y/n]
+# > y
+#
+# > Processing: Interstellar (2014)
+# > [Shows context JSON]
+# > Approve this context for translation? [Y/n/e/d]
+# > n  (skip this movie)
+#
+# > 2/3 movies approved for translation
+#
+# Phase 2: Translation
+# > Translating: The Matrix (1999)
+# > [Progress bar for translation batches]
+# > Saved fi subtitles: /path/to/The.Matrix.1999.fi.srt
+#
+# > Translating: Inception (2010)
+# > [Progress bar for translation batches]
+# > Saved fi subtitles: /path/to/Inception.2010.fi.srt
+#
+# > Completed: 2/2 movies translated
 ```
 
 ### Batch extraction mode

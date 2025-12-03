@@ -30,6 +30,7 @@
 - Add/extend tests under `tests/` using `pytest`; name files `test_*.py` and functions `test_*`.
 - Prefer deterministic tests: mock OpenAI and Bazarr HTTP calls; avoid live network I/O.
 - Cover new CLI flags and error paths (e.g., missing subtitles, path mapping misses). Use sample paths like `/volume1/movies` → `/Volumes/NAS/movies` for regression cases.
+- If a test requires extensive mocking, don't include the test, add a comment explaining why the feature can't be tested.
 
 ## Commit & Pull Request Guidelines
 
@@ -41,6 +42,10 @@
 
 - Do not commit `config.yml` or real API keys; use `config.example.yml` as the template and set `OPENAI_API_KEY` via environment.
 - If testing against Bazarr, use non-production endpoints or mocks and scrub logs. Clear caches in `~/.cache/subtrans` if stale context/subtitles cause confusion.
+
+## Utility scripts
+
+- Never create "test scripts" or "demo scripts", instead create an actual unit test
 
 ## bd Issue Tracker
 

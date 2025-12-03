@@ -11,3 +11,6 @@ wheels/
 
 # Configuration (contains API keys)
 config.yml
+
+# Temprorary files
+tmp/

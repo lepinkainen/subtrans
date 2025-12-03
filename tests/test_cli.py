@@ -1,11 +1,11 @@
-"""Tests for CLI extract-only mode."""
+"""Tests for CLI two-phase workflow."""
 
 from unittest.mock import patch
 
 
 def test_extract_only_skips_translation(tmp_path):
     """Should skip translation when extract_only is True."""
-    from subtrans.cli import process_movie
+    from subtrans.cli import process_movie_phase1
     from subtrans.core.models import Movie
 
     # Create a test SRT file
@@ -32,8 +32,8 @@ Test subtitle
     with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (srt_path, False)
 
-        # Call with extract_only=True
-        result = process_movie(
+        # Call with extract_only=True (uses phase1)
+        result = process_movie_phase1(
             movie,
             client=None,  # No client needed for extract-only
             extract_only=True,
@@ -46,7 +46,7 @@ Test subtitle
 
 def test_extract_only_loads_subtitle(tmp_path):
     """Should load subtitle file in extract-only mode."""
-    from subtrans.cli import process_movie
+    from subtrans.cli import process_movie_phase1
     from subtrans.core.models import Movie
 
     # Create a test SRT file with multiple entries
@@ -75,7 +75,7 @@ Second subtitle
     with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (srt_path, False)
 
-        result = process_movie(
+        result = process_movie_phase1(
             movie,
             client=None,
             extract_only=True,
@@ -87,7 +87,7 @@ Second subtitle
 
 def test_extract_only_handles_missing_subtitle():
     """Should fail gracefully when subtitle not found in extract-only mode."""
-    from subtrans.cli import process_movie
+    from subtrans.cli import process_movie_phase1
     from subtrans.core.models import Movie
 
     movie = Movie(
@@ -102,7 +102,7 @@ def test_extract_only_handles_missing_subtitle():
     with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (None, False)  # Subtitle not found
 
-        result = process_movie(
+        result = process_movie_phase1(
             movie,
             client=None,
             extract_only=True,
@@ -113,19 +113,20 @@ def test_extract_only_handles_missing_subtitle():
 
 
 def test_show_context_functionality():
-    """Test that show_context parameter exists in function signature."""
-    from subtrans.cli import process_movie
+    """Test that context is always shown in phase1 (no show_context param)."""
+    from subtrans.cli import process_movie_phase1
     import inspect
 
-    # Verify show_context parameter exists
-    sig = inspect.signature(process_movie)
-    assert "show_context" in sig.parameters
-    assert sig.parameters["show_context"].default is False
+    # Phase 1 always shows context - verify no show_context parameter
+    sig = inspect.signature(process_movie_phase1)
+    # show_context parameter should NOT exist in phase1
+    # (context is always shown in phase1)
+    assert "show_context" not in sig.parameters
 
 
 def test_normal_mode_requires_client():
     """Should require OpenAI client when not in extract-only mode."""
-    from subtrans.cli import process_movie
+    from subtrans.cli import process_movie_phase1
     from subtrans.core.models import Movie
 
     movie = Movie(
@@ -143,12 +144,11 @@ def test_normal_mode_requires_client():
     with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (None, False)
 
-        result = process_movie(
+        result = process_movie_phase1(
             movie,
             client=None,
             extract_only=False,  # Explicitly False
             dry_run=True,  # Use dry_run to avoid needing full setup
-            show_context=False,  # Explicitly set to False
         )
 
         assert result is False  # Fails due to missing subtitle
