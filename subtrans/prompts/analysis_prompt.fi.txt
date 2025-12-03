@@ -1,27 +1,65 @@
-Analyze these movie subtitles and extract information needed for English to Finnish translation.
+Read the following English subtitles for a single movie and build a JSON translation context
+to help translate them into Finnish.
 
-Return a JSON object with:
-{{
-    "characters": {{
-        "CharacterName": "keep|translate|note",
-        // For each character, indicate:
-        // - "keep" if name should stay in English (e.g., "Jack" -> "Jack")
-        // - "translate" if there's a commonly used Finnish equivalent (e.g., "Charles" -> "Kaarle" when discussing royalty)
-        // - Or provide the Finnish version/note (e.g., "Johnny" -> "kept as Johnny, nicknamed 'Joni' by friends")
-        // Typically first names are kept, but historical or royal names may be translated
-    }},
-    "places": {{
-        "PlaceName": "keep|Finnish equivalent|note"
-    }},
-    "recurring_terms": {{
-        // Catchphrases, technical terms, made-up words that appear multiple times
-        "English term": "suggested Finnish translation or handling"
-    }},
-    "genre": "action|comedy|drama|horror|sci-fi|fantasy|thriller|romance|documentary|animated|other",
-    "tone": "serious|humorous|dark|lighthearted|mixed",
-    "formality": "formal|informal|mixed",
-    "formality_recommendation": "te|sinä",  // Which Finnish 'you' form to use predominantly
-    "style_notes": "Any other notes about language style, slang, accents, time period, etc. that would help translation"
-}}
+Goals:
+1. Identify character names and how they should be treated in translation.
+2. Identify place names and how they should be treated in translation.
+3. Identify recurring phrases or terminology that should be translated consistently,
+   including any domain-specific vocabulary (e.g. royalty, police, intelligence, military,
+   legal, medical, fantasy, science/tech) if such domains clearly appear.
+4. Identify any domains relevant to translation (e.g., royalty, military, 
+   intelligence, police, medical, legal, sci-fi, fantasy, aviation, etc.). Only include domains that are clearly present in the subtitles.
+5. Infer genre, tone, and appropriate default formality level for dialogue.
 
-Focus on consistency - the goal is to make sure the same names/terms are translated the same way throughout.
+Output format:
+Return ONLY a single JSON object with the following structure:
+
+{
+  "characters": {
+    "<canonical character name>": "<short instructions on how to handle this name in Finnish>"
+  },
+  "places": {
+    "<place name>": "<short instructions, e.g. keep, or how to inflect/translate>"
+  },
+  "recurring_terms": {
+    "<English term or phrase>": "<recommended Finnish translation and/or usage notes>"
+  },
+  "domains": [
+    // zero or more short labels describing important semantic domains in the movie,
+    // e.g. "royalty", "police_intelligence", "military", "medical", "legal",
+    // "science_tech", "fantasy_magic", "religion"
+  ],
+  "domain_glossaries": {
+    // OPTIONAL. Include only domains that are clearly present and have specialized vocabulary.
+    // For example, if there is police/intelligence content:
+    // "police_intelligence": {
+    //   "<English term>": "<recommended Finnish translation and brief note>",
+    //   "MI5": "MI5 (Britannian salainen palvelu)",
+    //   "Security Service": "Turvallisuuspalvelu"
+    // }
+  },
+  "genre": "<short genre label, e.g. 'romantic comedy', 'action thriller', 'family film'>",
+  "tone": "<short description, e.g. 'light and humorous', 'serious and tense', 'mixed'>",
+  "formality": "<overall formality level in the original, e.g. 'informal', 'formal', 'mixed'>",
+  "formality_recommendation": "<recommended default Finnish form of address: 'sinä', 'te', or 'mixed'>",
+  "style_notes": "<2–6 sentences of practical advice for a Finnish subtitle translator: how to handle register, royal titles if any, humor, kids' speech, etc.>"
+}
+
+Domain-specific instructions:
+- Only include a domain in "domains" and "domain_glossaries" if it is clearly present in the movie
+  (for example, repeated terminology related to police work, intelligence services, the military,
+  medicine, law, science/tech, magic systems, etc.).
+- Example: if the movie contains MI5, agents, security details, threat levels or similar,
+  add "police_intelligence" to "domains" and create a concise glossary under
+  "domain_glossaries.police_intelligence" with the most important English terms and their
+  recommended Finnish translations.
+- If no such specialized domain is clearly present, "domains" can be an empty array and
+  "domain_glossaries" can be an empty object.
+
+Other constraints:
+- Do NOT list generic everyday words (like “please”, “thank you”) in "recurring_terms" unless they
+  are part of a character’s specific catchphrase.
+- For character and place entries, keep the values short and practical (1–2 sentences).
+- If something is ambiguous, either omit it or mark it clearly as needing review,
+  e.g. "Shadow Cell": "epäselvä, tarkista kontekstista".
+- Do not output any explanation or text outside the JSON.

@@ -171,7 +171,20 @@ def analyze_subtitles(
                 messages=[
                     {
                         "role": "system",
-                        "content": f"You are analyzing subtitles for: {movie_title}",
+                        "content": f"""
+You are an expert audiovisual translator and linguist analyzing subtitles for the movie: {movie_title}.
+
+Source language: English
+Target language: Finnish
+
+Your task is to read the subtitles and produce a concise JSON "translation context" object that will be used by another model to translate the subtitles into Finnish.
+
+Requirements:
+- Focus on names, places, recurring terms, and domain-specific terminology that must be translated consistently.
+- Prefer professional Finnish subtitle style and terminology.
+- If you are uncertain about something, either omit it or mark it as needing review instead of inventing details.
+- Your reply MUST be a single valid JSON object and nothing else.
+""",
                     },
                     {
                         "role": "user",
