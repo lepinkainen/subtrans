@@ -71,6 +71,8 @@ def test_translate_subtitles_batch_quota_error_exits_gracefully(monkeypatch):
         tone="serious",
         formality="sinä",
         style_notes="",
+        domains=[],
+        domain_glossaries={},
         raw_json={},
     )
 

@@ -225,6 +225,8 @@ Requirements:
             tone=result.get("tone", "mixed"),
             formality=formality,
             style_notes=result.get("style_notes", ""),
+            domains=result.get("domains", []),
+            domain_glossaries=result.get("domain_glossaries", {}),
             raw_json=result,
         )
 
@@ -248,6 +250,8 @@ Requirements:
             tone="mixed",
             formality=None,
             style_notes="",
+            domains=[],
+            domain_glossaries={},
             raw_json={},
         )
 
@@ -288,6 +292,23 @@ def build_translation_prompt(
         term_items = [f'  - "{src}" -> "{tgt}"' for src, tgt in context.terms.items()]
         term_list = "Recurring terms/phrases:\n" + "\n".join(term_items)
 
+    # Format domain glossaries
+    domain_glossary_text = ""
+    if context.domains and context.domain_glossaries:
+        glossary_sections = []
+        for domain in context.domains:
+            if domain in context.domain_glossaries:
+                terms = context.domain_glossaries[domain]
+                term_items = [f'  - "{en}" -> "{fi}"' for en, fi in terms.items()]
+                glossary_sections.append(
+                    f"{domain.replace('_', ' ').title()}:\n" + "\n".join(term_items)
+                )
+
+        if glossary_sections:
+            domain_glossary_text = "Domain-specific terminology:\n" + "\n\n".join(
+                glossary_sections
+            )
+
     # Use specialized prompt for English → Finnish, generic for others
     if source_lang == "en" and target_lang == "fi":
         return f"""You are a professional subtitle translator specializing in English to Finnish translation.
@@ -305,6 +326,8 @@ TERMINOLOGY (use consistently):
 {place_list if place_list else ""}
 
 {term_list if term_list else ""}
+
+{domain_glossary_text if domain_glossary_text else ""}
 
 TRANSLATION GUIDELINES:
 - Translate naturally into Finnish, not word-for-word
@@ -347,6 +370,8 @@ TERMINOLOGY (use consistently):
 {place_list if place_list else ""}
 
 {term_list if term_list else ""}
+
+{domain_glossary_text if domain_glossary_text else ""}
 
 TRANSLATION GUIDELINES:
 - Translate naturally into {target_lang}, not word-for-word

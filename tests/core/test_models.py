@@ -72,6 +72,10 @@ def test_translation_context_dataclass():
         tone="serious",
         formality="informal",
         style_notes="Modern slang",
+        domains=["police_intelligence"],
+        domain_glossaries={
+            "police_intelligence": {"MI5": "MI5 (Britannian salainen palvelu)"}
+        },
         raw_json={"test": "data"},
     )
     assert context.genre == "action"
@@ -81,4 +85,8 @@ def test_translation_context_dataclass():
     assert context.places == {"New York": "New York"}
     assert context.terms == {"hello": "moi"}
     assert context.style_notes == "Modern slang"
+    assert context.domains == ["police_intelligence"]
+    assert context.domain_glossaries == {
+        "police_intelligence": {"MI5": "MI5 (Britannian salainen palvelu)"}
+    }
     assert context.raw_json == {"test": "data"}

@@ -55,4 +55,8 @@ class TranslationContext:
         str | None
     )  # Language-specific formality guidance (e.g., "te"/"sinä" for Finnish)
     style_notes: str
+    domains: list[
+        str
+    ]  # Specialized semantic domains (e.g., "police_intelligence", "medical")
+    domain_glossaries: dict[str, dict[str, str]]  # Domain-specific terminology mappings
     raw_json: dict

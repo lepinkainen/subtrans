@@ -80,6 +80,8 @@ def load_cached_context(
             tone=cached_data.get("tone", "mixed"),
             formality=cached_data.get("formality_recommendation", "sinä"),
             style_notes=cached_data.get("style_notes", ""),
+            domains=cached_data.get("domains", []),
+            domain_glossaries=cached_data.get("domain_glossaries", {}),
             raw_json=cached_data,
         )
 

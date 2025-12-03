@@ -71,6 +71,11 @@ def test_save_and_load_context_roundtrip(tmp_path, monkeypatch):
         tone="formal",
         formality="formal",
         style_notes="Period piece",
+        domains=["police_intelligence", "military"],
+        domain_glossaries={
+            "police_intelligence": {"MI5": "MI5 (Britannian salainen palvelu)"},
+            "military": {"sergeant": "kersantti"},
+        },
         raw_json={
             "characters": {"Alice": "Alice"},
             "places": {"London": "Lontoo"},
@@ -79,6 +84,11 @@ def test_save_and_load_context_roundtrip(tmp_path, monkeypatch):
             "tone": "formal",
             "formality_recommendation": "formal",
             "style_notes": "Period piece",
+            "domains": ["police_intelligence", "military"],
+            "domain_glossaries": {
+                "police_intelligence": {"MI5": "MI5 (Britannian salainen palvelu)"},
+                "military": {"sergeant": "kersantti"},
+            },
         },
     )
 
@@ -96,6 +106,11 @@ def test_save_and_load_context_roundtrip(tmp_path, monkeypatch):
     assert loaded.tone == "formal"
     assert loaded.formality == "formal"
     assert loaded.style_notes == "Period piece"
+    assert loaded.domains == ["police_intelligence", "military"]
+    assert loaded.domain_glossaries == {
+        "police_intelligence": {"MI5": "MI5 (Britannian salainen palvelu)"},
+        "military": {"sergeant": "kersantti"},
+    }
 
 
 def test_load_cached_context_missing(tmp_path, monkeypatch):
