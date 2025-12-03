@@ -57,7 +57,7 @@ class MultiSelectControl(FormattedTextControl):
         content.append(
             (
                 "class:instruction",
-                "Type to filter | ↑/↓ j/k: move | Space: toggle | a: all | Enter: confirm | q: quit",
+                "Type to filter | ↑/↓ j/k: move | Space: toggle | Ctrl-a: all | Enter: confirm | q: quit",
             )
         )
         content.append(("", "\n"))
@@ -222,10 +222,12 @@ def create_fzf_interface(movies: list[Movie]) -> list[Movie]:
         control.select_all_visible()
         event.app.invalidate()
 
-    @kb.add("a")
+    @kb.add("escape a")
     def _(event):
         control.select_all_visible()
         event.app.invalidate()
+
+
 
     @kb.add("enter")
     def _(event):

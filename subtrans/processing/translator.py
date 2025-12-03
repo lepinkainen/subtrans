@@ -67,10 +67,12 @@ def load_analysis_prompt(source_lang: str, target_lang: str) -> str:
     try:
         with open(prompt_path, encoding="utf-8") as f:
             prompt_template = f.read()
-            # Substitute language placeholders
-            return prompt_template.format(
-                source_lang=source_lang, target_lang=target_lang
-            )
+            # Only substitute language placeholders if they exist in the template
+            if "{source_lang}" in prompt_template or "{target_lang}" in prompt_template:
+                return prompt_template.format(
+                    source_lang=source_lang, target_lang=target_lang
+                )
+            return prompt_template
     except FileNotFoundError:
         console.print(
             f"[yellow]Warning: Could not find prompt file at {prompt_path}. "
