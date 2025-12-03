@@ -1,0 +1,23 @@
+Analyze these movie subtitles and extract information needed for {source_lang} to {target_lang} translation.
+
+Return a JSON object with:
+{{
+    "characters": {{
+        "CharacterName": "keep|translate|note"
+        // How to handle character names (transliterate, keep original, translate, etc.)
+    }},
+    "places": {{
+        "PlaceName": "keep|target language equivalent|note"
+    }},
+    "recurring_terms": {{
+        // Catchphrases, technical terms, made-up words that appear multiple times
+        "Source term": "suggested target translation or handling"
+    }},
+    "genre": "action|comedy|drama|horror|sci-fi|fantasy|thriller|romance|documentary|animated|other",
+    "tone": "serious|humorous|dark|lighthearted|mixed",
+    "formality": "formal|informal|mixed",
+    "formality_guidance": "Notes on appropriate formality level for target language (if applicable)",
+    "style_notes": "Language style, slang, accents, time period, cultural context, etc."
+}}
+
+Focus on consistency - the goal is to make sure the same names/terms are translated the same way throughout.

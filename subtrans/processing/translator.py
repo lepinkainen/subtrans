@@ -3,6 +3,7 @@
 import json
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, cast
 
 import pysrt
@@ -18,6 +19,10 @@ from rich.progress import (
 
 from ..core.models import TranslationContext
 from ..core.utils import console
+
+
+# Directory containing prompt templates
+PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
 
 # Allow overriding in tests to avoid sleeps
@@ -37,6 +42,50 @@ def _retry_delay_from_error(error: RateLimitError, fallback: float) -> float:
         # If anything goes wrong, just fall back to default
         pass
     return fallback
+
+
+def load_analysis_prompt(source_lang: str, target_lang: str) -> str:
+    """
+    Load analysis prompt from external text file.
+
+    Tries to load language-specific prompt (e.g., analysis_prompt.fi.txt),
+    falls back to generic prompt (analysis_prompt.txt).
+
+    Args:
+        source_lang: Source language code (ISO 639-1/2)
+        target_lang: Target language code (ISO 639-1/2)
+
+    Returns:
+        Prompt text with {source_lang} and {target_lang} substituted
+    """
+    # Try language-specific prompt first
+    lang_specific_path = PROMPTS_DIR / f"analysis_prompt.{target_lang}.txt"
+    generic_path = PROMPTS_DIR / "analysis_prompt.txt"
+
+    prompt_path = lang_specific_path if lang_specific_path.exists() else generic_path
+
+    try:
+        with open(prompt_path, encoding="utf-8") as f:
+            prompt_template = f.read()
+            # Substitute language placeholders
+            return prompt_template.format(
+                source_lang=source_lang, target_lang=target_lang
+            )
+    except FileNotFoundError:
+        console.print(
+            f"[yellow]Warning: Could not find prompt file at {prompt_path}. "
+            "Using fallback prompt.[/yellow]"
+        )
+        # Fallback to a minimal generic prompt
+        return f"""Analyze these movie subtitles and extract information needed for {source_lang} to {target_lang} translation.
+Return a JSON object with: characters, places, recurring_terms, genre, tone, formality, style_notes."""
+    except Exception as e:
+        console.print(
+            f"[yellow]Warning: Error loading prompt file: {e}. "
+            "Using fallback prompt.[/yellow]"
+        )
+        return f"""Analyze these movie subtitles and extract information needed for {source_lang} to {target_lang} translation.
+Return a JSON object with: characters, places, recurring_terms, genre, tone, formality, style_notes."""
 
 
 def _call_with_retries(
@@ -112,60 +161,8 @@ def analyze_subtitles(
     # Combine all subtitle text
     full_text = "\n".join(sub.text.replace("\n", " ") for sub in subs)
 
-    # Use specialized prompt for English → Finnish, generic for others
-    if source_lang == "en" and target_lang == "fi":
-        analysis_prompt = """Analyze these movie subtitles and extract information needed for English to Finnish translation.
-
-Return a JSON object with:
-{
-    "characters": {
-        "CharacterName": "keep|translate|note",
-        // For each character, indicate:
-        // - "keep" if name should stay in English (e.g., "Jack" -> "Jack")
-        // - "translate" if there's a commonly used Finnish equivalent (e.g., "Charles" -> "Kaarle" when discussing royalty)
-        // - Or provide the Finnish version/note (e.g., "Johnny" -> "kept as Johnny, nicknamed 'Joni' by friends")
-        // Typically first names are kept, but historical or royal names may be translated
-    },
-    "places": {
-        "PlaceName": "keep|Finnish equivalent|note"
-    },
-    "recurring_terms": {
-        // Catchphrases, technical terms, made-up words that appear multiple times
-        "English term": "suggested Finnish translation or handling"
-    },
-    "genre": "action|comedy|drama|horror|sci-fi|fantasy|thriller|romance|documentary|animated|other",
-    "tone": "serious|humorous|dark|lighthearted|mixed",
-    "formality": "formal|informal|mixed",
-    "formality_recommendation": "te|sinä",  // Which Finnish 'you' form to use predominantly
-    "style_notes": "Any other notes about language style, slang, accents, time period, etc. that would help translation"
-}
-
-Focus on consistency - the goal is to make sure the same names/terms are translated the same way throughout."""
-    else:
-        # Generic prompt for other language pairs
-        analysis_prompt = f"""Analyze these movie subtitles and extract information needed for {source_lang} to {target_lang} translation.
-
-Return a JSON object with:
-{{
-    "characters": {{
-        "CharacterName": "keep|translate|note"
-        // How to handle character names (transliterate, keep original, translate, etc.)
-    }},
-    "places": {{
-        "PlaceName": "keep|target language equivalent|note"
-    }},
-    "recurring_terms": {{
-        // Catchphrases, technical terms, made-up words that appear multiple times
-        "Source term": "suggested target translation or handling"
-    }},
-    "genre": "action|comedy|drama|horror|sci-fi|fantasy|thriller|romance|documentary|animated|other",
-    "tone": "serious|humorous|dark|lighthearted|mixed",
-    "formality": "formal|informal|mixed",
-    "formality_guidance": "Notes on appropriate formality level for target language (if applicable)",
-    "style_notes": "Language style, slang, accents, time period, cultural context, etc."
-}}
-
-Focus on consistency - the goal is to make sure the same names/terms are translated the same way throughout."""
+    # Load analysis prompt from external file (language-specific or generic)
+    analysis_prompt = load_analysis_prompt(source_lang, target_lang)
 
     try:
         response = _call_with_retries(
@@ -304,8 +301,21 @@ TRANSLATION GUIDELINES:
 - Handle idioms appropriately for Finnish audience
 - Preserve emphasis and emotion from original
 
-Return ONLY the translated text, one subtitle per line, in the same order as input.
-Use "---" as separator between subtitles. Do not add numbering or timestamps."""
+Return ONLY the translated Finnish text, maintaining the exact same number of subtitles as the input.
+Separate each translation with exactly this pattern on its own line: [NEXT]
+
+CRITICAL FORMATTING RULES:
+- Each subtitle translation should be on a single line (no line breaks within a translation)
+- Put [NEXT] on its own line between translations
+- Do not add numbering, timestamps, or any other formatting
+- The total number of translations must match the input exactly
+
+Example format for 3 subtitles:
+First subtitle translation here
+[NEXT]
+Second subtitle translation here
+[NEXT]
+Third subtitle translation here"""
     else:
         # Generic prompt for other language pairs
         formality_note = f"\n- {context.formality}" if context.formality else ""
@@ -333,8 +343,21 @@ TRANSLATION GUIDELINES:
 - Preserve emphasis and emotion from original
 - Maintain consistency with the terminology guidance above
 
-Return ONLY the translated text, one subtitle per line, in the same order as input.
-Use "---" as separator between subtitles. Do not add numbering or timestamps."""
+Return ONLY the translated {target_lang} text, maintaining the exact same number of subtitles as the input.
+Separate each translation with exactly this pattern on its own line: [NEXT]
+
+CRITICAL FORMATTING RULES:
+- Each subtitle translation should be on a single line (no line breaks within a translation)
+- Put [NEXT] on its own line between translations
+- Do not add numbering, timestamps, or any other formatting
+- The total number of translations must match the input exactly
+
+Example format for 3 subtitles:
+First subtitle translation here
+[NEXT]
+Second subtitle translation here
+[NEXT]
+Third subtitle translation here"""
 
 
 def translate_subtitles_batch(
@@ -384,8 +407,21 @@ Guidelines:
 - Keep translations concise to fit on screen
 - Handle idioms appropriately for Finnish audience
 
-Return ONLY the translated text, one subtitle per line, in the same order as input.
-Use "---" as separator between subtitles."""
+Return ONLY the translated Finnish text, maintaining the exact same number of subtitles as the input.
+Separate each translation with exactly this pattern on its own line: [NEXT]
+
+CRITICAL FORMATTING RULES:
+- Each subtitle translation should be on a single line (no line breaks within a translation)
+- Put [NEXT] on its own line between translations
+- Do not add numbering, timestamps, or any other formatting
+- The total number of translations must match the input exactly
+
+Example format for 3 subtitles:
+First subtitle translation here
+[NEXT]
+Second subtitle translation here
+[NEXT]
+Third subtitle translation here"""
         else:
             system_prompt = f"""You are a professional subtitle translator specializing in {source_lang} to {target_lang} translation.
 You are translating subtitles for: {movie_title}
@@ -395,8 +431,21 @@ Guidelines:
 - Keep translations concise to fit on screen
 - Handle idioms and cultural references appropriately
 
-Return ONLY the translated text, one subtitle per line, in the same order as input.
-Use "---" as separator between subtitles."""
+Return ONLY the translated {target_lang} text, maintaining the exact same number of subtitles as the input.
+Separate each translation with exactly this pattern on its own line: [NEXT]
+
+CRITICAL FORMATTING RULES:
+- Each subtitle translation should be on a single line (no line breaks within a translation)
+- Put [NEXT] on its own line between translations
+- Do not add numbering, timestamps, or any other formatting
+- The total number of translations must match the input exactly
+
+Example format for 3 subtitles:
+First subtitle translation here
+[NEXT]
+Second subtitle translation here
+[NEXT]
+Third subtitle translation here"""
 
     console.print(
         f"[blue]Pass 2: Translating {len(subs)} subtitles in {total_batches} batches...[/blue]"
@@ -420,7 +469,7 @@ Use "---" as separator between subtitles."""
 
             # Prepare batch text with clear separators
             batch_texts = [sub.text.replace("\n", " ") for sub in batch]
-            input_text = "\n---\n".join(batch_texts)
+            input_text = "\n[NEXT]\n".join(batch_texts)
 
             # Add context about position in movie
             position_note = ""
@@ -454,16 +503,39 @@ Use "---" as separator between subtitles."""
                             "OpenAI API returned empty content for translation"
                         )
                     translated_text = content.strip()
-                    translations = translated_text.split("\n---\n")
 
-                    # Handle case where model doesn't use separator
+                    # Try splitting by separator with newlines
+                    translations = [
+                        t.strip()
+                        for t in translated_text.split("\n[NEXT]\n")
+                        if t.strip()
+                    ]
+
+                    # If that didn't work, try without newlines
                     if len(translations) == 1 and len(batch) > 1:
-                        # Try splitting by newlines
                         translations = [
-                            t.strip() for t in translated_text.split("\n") if t.strip()
+                            t.strip()
+                            for t in translated_text.split("[NEXT]")
+                            if t.strip()
                         ]
 
+                    # Last resort: try splitting by newlines
+                    if len(translations) == 1 and len(batch) > 1:
+                        fallback_translations = [
+                            t.strip()
+                            for t in translated_text.split("\n")
+                            if t.strip() and t.strip() != "[NEXT]"
+                        ]
+                        # ONLY use fallback if it gives exactly the right count
+                        if len(fallback_translations) == len(batch):
+                            translations = fallback_translations
+                        # Otherwise keep as 1 item, will trigger error and retry
+
                     if len(translations) != len(batch):
+                        # Log first 300 chars of response for debugging
+                        console.print(
+                            f"[yellow]Response preview: {translated_text[:300]}...[/yellow]"
+                        )
                         raise ValueError(
                             f"Expected {len(batch)} translations, got {len(translations)}"
                         )

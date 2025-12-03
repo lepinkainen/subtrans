@@ -1,0 +1,27 @@
+Analyze these movie subtitles and extract information needed for English to Finnish translation.
+
+Return a JSON object with:
+{{
+    "characters": {{
+        "CharacterName": "keep|translate|note",
+        // For each character, indicate:
+        // - "keep" if name should stay in English (e.g., "Jack" -> "Jack")
+        // - "translate" if there's a commonly used Finnish equivalent (e.g., "Charles" -> "Kaarle" when discussing royalty)
+        // - Or provide the Finnish version/note (e.g., "Johnny" -> "kept as Johnny, nicknamed 'Joni' by friends")
+        // Typically first names are kept, but historical or royal names may be translated
+    }},
+    "places": {{
+        "PlaceName": "keep|Finnish equivalent|note"
+    }},
+    "recurring_terms": {{
+        // Catchphrases, technical terms, made-up words that appear multiple times
+        "English term": "suggested Finnish translation or handling"
+    }},
+    "genre": "action|comedy|drama|horror|sci-fi|fantasy|thriller|romance|documentary|animated|other",
+    "tone": "serious|humorous|dark|lighthearted|mixed",
+    "formality": "formal|informal|mixed",
+    "formality_recommendation": "te|sinä",  // Which Finnish 'you' form to use predominantly
+    "style_notes": "Any other notes about language style, slang, accents, time period, etc. that would help translation"
+}}
+
+Focus on consistency - the goal is to make sure the same names/terms are translated the same way throughout.
