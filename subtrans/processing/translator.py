@@ -44,6 +44,65 @@ def _retry_delay_from_error(error: RateLimitError, fallback: float) -> float:
     return fallback
 
 
+def _calculate_text_similarity(text1: str, text2: str) -> float:
+    """
+    Calculate similarity ratio between two texts.
+
+    Returns a value from 0.0 (identical) to 1.0 (completely different).
+    Uses difflib.SequenceMatcher for character-based comparison.
+
+    Args:
+        text1: First text to compare
+        text2: Second text to compare
+
+    Returns:
+        Difference ratio (1.0 - similarity)
+    """
+    from difflib import SequenceMatcher
+
+    # Normalize: lowercase, strip whitespace
+    t1 = text1.lower().strip()
+    t2 = text2.lower().strip()
+
+    # Edge cases
+    if not t1 and not t2:
+        return 0.0  # Both empty = identical
+    if not t1 or not t2:
+        return 1.0  # One empty = completely different
+
+    # Calculate similarity using SequenceMatcher
+    matcher = SequenceMatcher(None, t1, t2)
+    similarity = matcher.ratio()
+
+    # Return difference (1.0 - similarity)
+    return 1.0 - similarity
+
+
+def _validate_translation_quality(
+    original: str,
+    translated: str,
+    min_difference: float = 0.8,
+) -> tuple[bool, float]:
+    """
+    Validate that translation is sufficiently different from original.
+
+    This helps detect cases where the API returns untranslated or
+    insufficiently translated text.
+
+    Args:
+        original: Original subtitle text
+        translated: Translated subtitle text
+        min_difference: Minimum difference ratio (0.0-1.0)
+
+    Returns:
+        Tuple of (is_valid, actual_difference)
+    """
+    difference = _calculate_text_similarity(original, translated)
+    is_valid = difference >= min_difference
+
+    return is_valid, difference
+
+
 def load_analysis_prompt(source_lang: str, target_lang: str) -> str:
     """
     Load analysis prompt from external text file.
@@ -409,6 +468,8 @@ def translate_subtitles_batch(
     model: str = "gpt-4o",
     source_lang: str = "en",
     target_lang: str = "fi",
+    validate_translation: bool = True,
+    min_translation_difference: float = 0.8,
 ) -> pysrt.SubRipFile:
     """
     Second pass: Translate subtitles in batches using extracted context.
@@ -422,6 +483,8 @@ def translate_subtitles_batch(
         model: OpenAI model to use
         source_lang: Source language code (ISO 639-1/2)
         target_lang: Target language code (ISO 639-1/2)
+        validate_translation: Whether to validate translation quality
+        min_translation_difference: Minimum difference ratio (0.0-1.0)
 
     Returns:
         Translated subtitle file
@@ -610,6 +673,27 @@ Third subtitle translation here"""
                 for sub in batch:
                     translated.append(sub)
             else:
+                # Validate batch quality if enabled (compare entire batch at once)
+                if validate_translation:
+                    # Combine original batch texts
+                    original_batch_text = " ".join(sub.text for sub in batch)
+                    # Combine translated batch texts
+                    translated_batch_text = " ".join(translations)
+
+                    # Check if entire batch is sufficiently different
+                    is_valid, difference = _validate_translation_quality(
+                        original_batch_text,
+                        translated_batch_text,
+                        min_difference=min_translation_difference,
+                    )
+
+                    if not is_valid:
+                        batch_num = i // batch_size + 1
+                        console.print(
+                            f"[yellow]Warning: Batch {batch_num} appears untranslated "
+                            f"(only {difference:.1%} different from original)[/yellow]"
+                        )
+
                 # Create translated subtitle items
                 for j, sub in enumerate(batch):
                     new_sub = pysrt.SubRipItem(

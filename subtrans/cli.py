@@ -484,6 +484,8 @@ def process_movie_phase2(
     path_mappings: list[tuple[str, str]] | None = None,
     source_lang: str = "en",
     target_lang: str = "fi",
+    validate_translation: bool = True,
+    min_translation_difference: float = 0.8,
 ) -> bool:
     """
     Phase 2: Load cached context, translate subtitles, save output.
@@ -497,6 +499,8 @@ def process_movie_phase2(
         path_mappings: Path mappings for NAS to local translation
         source_lang: Source language code (ISO 639-1/2)
         target_lang: Target language code (ISO 639-1/2)
+        validate_translation: Whether to validate translation quality
+        min_translation_difference: Minimum difference ratio (0.0-1.0)
 
     Returns:
         True if translation succeeded, False otherwise
@@ -556,6 +560,8 @@ def process_movie_phase2(
         model=translation_model,
         source_lang=source_lang,
         target_lang=target_lang,
+        validate_translation=validate_translation,
+        min_translation_difference=min_translation_difference,
     )
 
     # Save translated subtitles
@@ -753,6 +759,8 @@ def main():
             path_mappings=config.path_mappings if config.path_mappings else None,
             source_lang=config.source_language,
             target_lang=config.target_language,
+            validate_translation=config.validate_translation,
+            min_translation_difference=config.min_translation_difference,
         ):
             success_count += 1
 

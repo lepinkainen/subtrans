@@ -40,6 +40,10 @@ class Config:
     dry_run: bool
     source_language: str = "en"  # ISO 639-1/2 code for source subtitle language
     target_language: str = "fi"  # ISO 639-1/2 code for target translation language
+    validate_translation: bool = (
+        True  # Check if translations are sufficiently different
+    )
+    min_translation_difference: float = 0.8  # Minimum difference ratio (0.0-1.0)
 
 
 @dataclass

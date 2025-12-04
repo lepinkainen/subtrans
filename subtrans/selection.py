@@ -5,6 +5,7 @@ from typing import Callable
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.keys import Keys
 from prompt_toolkit.layout.containers import HSplit, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
@@ -222,12 +223,10 @@ def create_fzf_interface(movies: list[Movie]) -> list[Movie]:
         control.select_all_visible()
         event.app.invalidate()
 
-    @kb.add("escape a")
+    @kb.add("escape", "a")
     def _(event):
         control.select_all_visible()
         event.app.invalidate()
-
-
 
     @kb.add("enter")
     def _(event):
@@ -256,32 +255,26 @@ def create_fzf_interface(movies: list[Movie]) -> list[Movie]:
     def _(event):
         event.app.exit()
 
-    # Handle text input
+    # Handle text input for search
     @kb.add("<any>")
     def _(event):
-        # Filter out control keys
-        if event.key_sequence[0].key and event.key_sequence[0].key in (
-            "up",
-            "down",
-            "left",
-            "right",
-            "home",
-            "end",
-            "delete",
-            "backspace",
-            "escape",
-            "enter",
-            "tab",
-            "space",
-        ):
+        # Only process single key presses
+        if len(event.key_sequence) != 1:
             return
 
-        # Get the character
-        if len(event.key_sequence) == 1:
-            char = event.key_sequence[0].key
-            if char and len(char) == 1 and char.isprintable():
-                control.add_search_text(char)
-                event.app.invalidate()
+        key_press = event.key_sequence[0]
+
+        # If the key is a Keys enum member, it's a special key (Control, Shift, Meta, etc.)
+        # We only want printable characters for search, so skip all Keys enum members
+        if isinstance(key_press.key, Keys):
+            return
+
+        # The key is a plain string - a regular printable character
+        # Add it to the search text
+        char = key_press.data if key_press.data else key_press.key
+        if char and len(char) == 1 and char.isprintable():
+            control.add_search_text(char)
+            event.app.invalidate()
 
     # Create the layout with separate header and content windows
     root_container = HSplit(

@@ -49,4 +49,8 @@ def load_config(config_path: Path) -> Config:
         dry_run=data["translation"]["dry_run"],
         source_language=data.get("languages", {}).get("source", "en"),
         target_language=data.get("languages", {}).get("target", "fi"),
+        validate_translation=data["translation"].get("validate_translation", True),
+        min_translation_difference=data["translation"].get(
+            "min_translation_difference", 0.8
+        ),
     )

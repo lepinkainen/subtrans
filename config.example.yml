@@ -37,3 +37,5 @@ translation:
   skip_analysis: false      # Skip context analysis for faster translation
   save_context: true        # Save translation context as JSON
   dry_run: false           # List movies without translating
+  validate_translation: true  # Check if translations are sufficiently different from original
+  min_translation_difference: 0.8  # Minimum difference ratio (0.0-1.0) for validation
