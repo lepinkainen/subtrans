@@ -39,3 +39,5 @@ translation:
   dry_run: false           # List movies without translating
   validate_translation: true  # Check if translations are sufficiently different from original
   min_translation_difference: 0.8  # Minimum difference ratio (0.0-1.0) for validation
+  log_token_usage: true     # Log API token usage to file for cost tracking
+                            # Token usage log location: ~/.cache/subtrans/token_usage.jsonl

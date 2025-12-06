@@ -18,6 +18,7 @@ from rich.progress import (
 )
 
 from ..core.models import TranslationContext
+from ..core.token_logger import log_token_usage as log_tokens
 from ..core.utils import console
 
 
@@ -202,6 +203,8 @@ def analyze_subtitles(
     model: str = "gpt-4o",
     source_lang: str = "en",
     target_lang: str = "fi",
+    movie_year: int | None = None,
+    log_token_usage: bool = True,
 ) -> TranslationContext:
     """
     First pass: Analyze full subtitle file to extract translation context.
@@ -213,6 +216,8 @@ def analyze_subtitles(
         model: OpenAI model to use
         source_lang: Source language code (ISO 639-1/2)
         target_lang: Target language code (ISO 639-1/2)
+        movie_year: Movie year for logging (optional)
+        log_token_usage: Whether to log API token usage for cost tracking
 
     Returns:
         TranslationContext with extracted metadata
@@ -262,6 +267,22 @@ Requirements:
         if content is None:
             raise ValueError("OpenAI API returned empty content for analysis")
         result = json.loads(content)
+
+        # Log token usage for cost tracking
+        if log_token_usage and response.usage:
+            log_tokens(
+                movie_title=movie_title,
+                movie_year=movie_year or 0,
+                phase="analysis",
+                model=model,
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                cached_tokens=getattr(response.usage, "prompt_tokens_details", {}).get(
+                    "cached_tokens", 0
+                )
+                if hasattr(response.usage, "prompt_tokens_details")
+                else 0,
+            )
 
         # Extract formality: use formality_recommendation for Finnish, formality_guidance for others
         formality = result.get("formality_recommendation") or result.get(
@@ -470,6 +491,8 @@ def translate_subtitles_batch(
     target_lang: str = "fi",
     validate_translation: bool = True,
     min_translation_difference: float = 0.8,
+    movie_year: int | None = None,
+    log_token_usage: bool = True,
 ) -> pysrt.SubRipFile:
     """
     Second pass: Translate subtitles in batches using extracted context.
@@ -485,6 +508,8 @@ def translate_subtitles_batch(
         target_lang: Target language code (ISO 639-1/2)
         validate_translation: Whether to validate translation quality
         min_translation_difference: Minimum difference ratio (0.0-1.0)
+        movie_year: Movie year for logging (optional)
+        log_token_usage: Whether to log API token usage for cost tracking
 
     Returns:
         Translated subtitle file
@@ -641,6 +666,24 @@ Third subtitle translation here"""
                         )
                         raise ValueError(
                             f"Expected {len(batch)} translations, got {len(translations)}"
+                        )
+
+                    # Log token usage for cost tracking
+                    if log_token_usage and response.usage:
+                        batch_num = i // batch_size + 1
+                        log_tokens(
+                            movie_title=movie_title,
+                            movie_year=movie_year or 0,
+                            phase="translation",
+                            model=model,
+                            input_tokens=response.usage.prompt_tokens,
+                            output_tokens=response.usage.completion_tokens,
+                            cached_tokens=getattr(
+                                response.usage, "prompt_tokens_details", {}
+                            ).get("cached_tokens", 0)
+                            if hasattr(response.usage, "prompt_tokens_details")
+                            else 0,
+                            batch_number=batch_num,
                         )
 
                     break

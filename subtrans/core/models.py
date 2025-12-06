@@ -44,6 +44,7 @@ class Config:
         True  # Check if translations are sufficiently different
     )
     min_translation_difference: float = 0.8  # Minimum difference ratio (0.0-1.0)
+    log_token_usage: bool = True  # Log API token usage to file for cost tracking
 
 
 @dataclass
