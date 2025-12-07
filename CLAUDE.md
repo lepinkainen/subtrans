@@ -6,23 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Subtitle Translator (`subtrans`) - A Python tool that translates English subtitles to Finnish using OpenAI GPT models with a **two-model architecture** for cost optimization. The tool integrates with Bazarr to automatically find movies missing Finnish subtitles and performs context-aware translation using a two-pass approach.
 
-### Two-Model Architecture
+### Two-Model Architecture with Flex Pricing
 
-The translation system uses different models for different phases:
+The translation system uses `gpt-5` for both phases with different service tiers for cost optimization:
 
-- **Pass 1 (Context Analysis)**: `gpt-4o`
+- **Pass 1 (Context Analysis)**: `gpt-5` with `service_tier="auto"` (Standard pricing)
   - Handles complex rule interpretation and entity extraction
   - Processes comprehensive JSON style guides
   - Extracts character names, places, terms, genre, tone, and formality
   - Multilingual context understanding (English/Spanish/Finnish code-switching)
+  - Uses standard tier for fast, interactive responses during human review
 
-- **Pass 2 (Translation)**: `gpt-4o-mini`
+- **Pass 2 (Translation)**: `gpt-5` with `service_tier="flex"` (50% discount)
   - Cost-effective translation guided by Pass 1 context
   - Executes straightforward translation following established rules
-  - Dramatically cheaper while maintaining quality through comprehensive context
+  - Uses Flex tier for 50% cost savings (can be slower, runs unattended)
+  - Automatic prompt caching with Flex tier (90% discount on cached tokens)
   - Benefits from detailed character/place/term mappings from analysis
 
-This approach provides the best balance of quality and cost: `gpt-4o` handles complex multi-layer instructions (conditional translations, entity handling) while `gpt-4o-mini` performs efficient translation with full context.
+This hybrid approach provides the best balance of responsiveness and cost:
+- Pass 1 uses standard tier for fast responses during interactive context review
+- Pass 2 uses Flex tier for significant cost savings on batch translation work
 
 ## Development Commands
 
@@ -31,7 +35,7 @@ This approach provides the best balance of quality and cost: `gpt-4o` handles co
 2. Edit `config.yml` with your Bazarr URL and API key
 3. Set environment variable: `export OPENAI_API_KEY=your_key_here`
 4. Configure path mappings if running from laptop with NAS mounted via SMB
-5. Configure analysis and translation models (default: `gpt-4o` and `gpt-4o-mini`)
+5. Configure analysis and translation models (default: `gpt-5` with hybrid service tiers)
 
 ### Running the application
 ```bash
@@ -60,13 +64,15 @@ bazarr:
   api_key: "YOUR_BAZARR_API_KEY_HERE"
 
 # OpenAI settings (API key from OPENAI_API_KEY environment variable)
-# Two-model approach for cost optimization:
-# - gpt-4o handles complex context analysis with rule interpretation
-# - gpt-4o-mini performs cost-effective translation guided by context
+# Hybrid service tier approach for cost optimization:
+# - Pass 1 uses "auto" (standard) tier for fast interactive responses
+# - Pass 2 uses "flex" tier for 50% cost savings (can be slower)
 openai:
-  analysis_model: "gpt-4o"      # Pass 1: Context analysis
-  translation_model: "gpt-4o-mini"  # Pass 2: Translation
+  analysis_model: "gpt-5"       # Pass 1: Context analysis
+  translation_model: "gpt-5"    # Pass 2: Translation
   batch_size: 50                # Number of subtitles per API call
+  analysis_service_tier: "auto" # Standard tier for Pass 1 (fast, interactive)
+  translation_service_tier: "flex" # Flex tier for Pass 2 (50% discount)
 
 # Path mappings - Map NAS paths to local mount points
 path_mappings:
@@ -352,15 +358,19 @@ path_mappings:
 
 ## Key Design Decisions
 
-### Two-Model Cost Optimization
-- **gpt-4o** for complex analysis ensures high-quality context extraction
+### Hybrid Service Tier Cost Optimization
+- **gpt-5** with `service_tier="auto"` for analysis ensures high-quality context extraction
   - Handles multi-layer instructions (entity handling, conditional translations)
   - Processes comprehensive JSON style guides with complex rules
   - Strong multilingual understanding (English/Spanish/Finnish code-switching)
-- **gpt-4o-mini** for translation reduces costs dramatically
+  - Standard tier for fast responses during interactive human review
+- **gpt-5** with `service_tier="flex"` for translation reduces costs by 50%
   - Executes straightforward translation guided by comprehensive context
   - Maintains quality through detailed character/place/term mappings
-  - 80-90% cost reduction compared to using gpt-4o for both passes
+  - Flex tier provides 50% discount on both input and output tokens
+  - Automatic prompt caching with Flex provides 90% discount on cached tokens
+  - Longer timeouts (900s vs 60s) accommodate Flex's slower response times
+  - 429 "Resource Unavailable" errors are retried automatically
 
 ### Context-Aware Translation
 The two-pass approach ensures:

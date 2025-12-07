@@ -4,10 +4,10 @@ import json
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import pysrt
-from openai import OpenAI, RateLimitError
+from openai import APIStatusError, OpenAI, RateLimitError
 from openai.types.chat.chat_completion import ChatCompletion
 from rich.progress import (
     Progress,
@@ -21,6 +21,8 @@ from ..core.models import TranslationContext
 from ..core.token_logger import log_token_usage as log_tokens
 from ..core.utils import console
 
+# Type alias for OpenAI service tier parameter
+ServiceTier = Literal["auto", "default", "flex", "scale", "priority"]
 
 # Directory containing prompt templates
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
@@ -159,10 +161,13 @@ def _call_with_retries(
     """
     Call an OpenAI request function with bounded retries and exponential backoff.
     Raises the last exception if all attempts fail.
-    """
-    from openai import RateLimitError
 
-    last_exception: RateLimitError | Exception | None = None
+    Handles:
+    - RateLimitError: Standard rate limiting (429)
+    - APIStatusError with 429: Flex tier "resource unavailable" errors
+      (user is NOT charged when this occurs, safe to retry)
+    """
+    last_exception: RateLimitError | APIStatusError | Exception | None = None
 
     for attempt in range(max_attempts):
         try:
@@ -177,6 +182,22 @@ def _call_with_retries(
                 f"({attempt + 1}/{max_attempts})[/yellow]"
             )
             _sleep(delay)
+        except APIStatusError as e:
+            # Handle Flex tier 429 "resource unavailable" errors
+            # These are different from rate limits - user is not charged
+            if e.status_code == 429:
+                last_exception = e
+                if attempt == max_attempts - 1:
+                    raise
+                delay = backoff_base * (2**attempt)
+                console.print(
+                    f"[yellow]Flex resources unavailable. Retrying in {delay:.1f}s "
+                    f"({attempt + 1}/{max_attempts})[/yellow]"
+                )
+                _sleep(delay)
+            else:
+                # Re-raise non-429 API errors immediately
+                raise
         except Exception as e:
             last_exception = e
             if attempt == max_attempts - 1:
@@ -205,6 +226,7 @@ def analyze_subtitles(
     target_lang: str = "fi",
     movie_year: int | None = None,
     log_token_usage: bool = True,
+    service_tier: str = "auto",
 ) -> TranslationContext:
     """
     First pass: Analyze full subtitle file to extract translation context.
@@ -218,6 +240,7 @@ def analyze_subtitles(
         target_lang: Target language code (ISO 639-1/2)
         movie_year: Movie year for logging (optional)
         log_token_usage: Whether to log API token usage for cost tracking
+        service_tier: OpenAI API service tier ("auto", "flex", "default", "priority")
 
     Returns:
         TranslationContext with extracted metadata
@@ -229,6 +252,14 @@ def analyze_subtitles(
 
     # Load analysis prompt from external file (language-specific or generic)
     analysis_prompt = load_analysis_prompt(source_lang, target_lang)
+
+    # Use 900s timeout for both tiers - large subtitle files need adequate time
+    timeout = 900
+    console.print(
+        f"[dim]Model: {model}, Service tier: {service_tier}, Timeout: {timeout}s[/dim]"
+    )
+    # Cast service_tier to the correct Literal type for the OpenAI SDK
+    tier = cast(ServiceTier, service_tier)
 
     try:
         response = _call_with_retries(
@@ -258,7 +289,8 @@ Requirements:
                     },
                 ],
                 response_format={"type": "json_object"},
-                timeout=60,
+                service_tier=tier,
+                timeout=timeout,
             )
         )
         response = cast(ChatCompletion, response)
@@ -277,11 +309,11 @@ Requirements:
                 model=model,
                 input_tokens=response.usage.prompt_tokens,
                 output_tokens=response.usage.completion_tokens,
-                cached_tokens=getattr(response.usage, "prompt_tokens_details", {}).get(
-                    "cached_tokens", 0
-                )
-                if hasattr(response.usage, "prompt_tokens_details")
-                else 0,
+                cached_tokens=(
+                    response.usage.prompt_tokens_details.cached_tokens or 0
+                    if response.usage.prompt_tokens_details is not None
+                    else 0
+                ),
             )
 
         # Extract formality: use formality_recommendation for Finnish, formality_guidance for others
@@ -493,6 +525,7 @@ def translate_subtitles_batch(
     min_translation_difference: float = 0.8,
     movie_year: int | None = None,
     log_token_usage: bool = True,
+    service_tier: str = "flex",
 ) -> pysrt.SubRipFile:
     """
     Second pass: Translate subtitles in batches using extracted context.
@@ -510,6 +543,7 @@ def translate_subtitles_batch(
         min_translation_difference: Minimum difference ratio (0.0-1.0)
         movie_year: Movie year for logging (optional)
         log_token_usage: Whether to log API token usage for cost tracking
+        service_tier: OpenAI API service tier ("auto", "flex", "default", "priority")
 
     Returns:
         Translated subtitle file
@@ -575,6 +609,11 @@ Second subtitle translation here
 [NEXT]
 Third subtitle translation here"""
 
+    # Determine timeout based on service tier (flex is slower, needs longer timeout)
+    timeout = 900 if service_tier == "flex" else 60
+    # Cast service_tier to the correct Literal type for the OpenAI SDK
+    tier = cast(ServiceTier, service_tier)
+
     console.print(
         f"[blue]Pass 2: Translating {len(subs)} subtitles in {total_batches} batches...[/blue]"
     )
@@ -620,7 +659,8 @@ Third subtitle translation here"""
                                     "content": f"{position_note}Translate to {target_lang}:\n\n{input_text}",
                                 },
                             ],
-                            timeout=60,
+                            service_tier=tier,
+                            timeout=timeout,
                         )
                     )
                     response = cast(ChatCompletion, response)
@@ -678,11 +718,11 @@ Third subtitle translation here"""
                             model=model,
                             input_tokens=response.usage.prompt_tokens,
                             output_tokens=response.usage.completion_tokens,
-                            cached_tokens=getattr(
-                                response.usage, "prompt_tokens_details", {}
-                            ).get("cached_tokens", 0)
-                            if hasattr(response.usage, "prompt_tokens_details")
-                            else 0,
+                            cached_tokens=(
+                                response.usage.prompt_tokens_details.cached_tokens or 0
+                                if response.usage.prompt_tokens_details is not None
+                                else 0
+                            ),
                             batch_number=batch_num,
                         )
 

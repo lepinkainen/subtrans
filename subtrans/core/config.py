@@ -53,4 +53,6 @@ def load_config(config_path: Path) -> Config:
         min_translation_difference=data["translation"].get(
             "min_translation_difference", 0.8
         ),
+        analysis_service_tier=data["openai"].get("analysis_service_tier", "auto"),
+        translation_service_tier=data["openai"].get("translation_service_tier", "flex"),
     )

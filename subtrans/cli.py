@@ -121,6 +121,7 @@ def process_movie_phase1(
     source_lang: str = "en",
     target_lang: str = "fi",
     log_token_usage: bool = True,
+    service_tier: str = "auto",
 ) -> bool:
     """
     Phase 1: Extract subtitle, analyze context, display for user review.
@@ -137,6 +138,7 @@ def process_movie_phase1(
         source_lang: Source language code (ISO 639-1/2)
         target_lang: Target language code (ISO 639-1/2)
         log_token_usage: Log API token usage for cost tracking
+        service_tier: OpenAI API service tier ("auto", "flex", "default", "priority")
 
     Returns:
         True if user approved (or extract_only), False if cancelled/error
@@ -200,6 +202,7 @@ def process_movie_phase1(
                 target_lang=target_lang,
                 movie_year=movie.year,
                 log_token_usage=log_token_usage,
+                service_tier=service_tier,
             )
 
             # Optionally save context for review/reuse in cache directory
@@ -491,6 +494,7 @@ def process_movie_phase2(
     validate_translation: bool = True,
     min_translation_difference: float = 0.8,
     log_token_usage: bool = True,
+    service_tier: str = "flex",
 ) -> bool:
     """
     Phase 2: Load cached context, translate subtitles, save output.
@@ -507,6 +511,7 @@ def process_movie_phase2(
         validate_translation: Whether to validate translation quality
         min_translation_difference: Minimum difference ratio (0.0-1.0)
         log_token_usage: Log API token usage for cost tracking
+        service_tier: OpenAI API service tier ("auto", "flex", "default", "priority")
 
     Returns:
         True if translation succeeded, False otherwise
@@ -570,6 +575,7 @@ def process_movie_phase2(
         min_translation_difference=min_translation_difference,
         movie_year=movie.year,
         log_token_usage=log_token_usage,
+        service_tier=service_tier,
     )
 
     # Save translated subtitles
@@ -636,8 +642,12 @@ def main():
             "[yellow]Extract-only mode: Subtitles will be cached without translation[/yellow]"
         )
     else:
-        console.print(f"[blue]Analysis model: {config.analysis_model}[/blue]")
-        console.print(f"[blue]Translation model: {config.translation_model}[/blue]")
+        console.print(
+            f"[blue]Analysis model: {config.analysis_model} (tier: {config.analysis_service_tier})[/blue]"
+        )
+        console.print(
+            f"[blue]Translation model: {config.translation_model} (tier: {config.translation_service_tier})[/blue]"
+        )
         console.print(f"[blue]Batch size: {config.batch_size}[/blue]")
 
     if config.path_mappings:
@@ -719,6 +729,7 @@ def main():
                 source_lang=config.source_language,
                 target_lang=config.target_language,
                 log_token_usage=config.log_token_usage,
+                service_tier=config.analysis_service_tier,
             ):
                 extract_count += 1
         console.print(
@@ -743,6 +754,7 @@ def main():
             source_lang=config.source_language,
             target_lang=config.target_language,
             log_token_usage=config.log_token_usage,
+            service_tier=config.analysis_service_tier,
         ):
             approved_movies.append(movie)
 
@@ -772,6 +784,7 @@ def main():
             validate_translation=config.validate_translation,
             min_translation_difference=config.min_translation_difference,
             log_token_usage=config.log_token_usage,
+            service_tier=config.translation_service_tier,
         ):
             success_count += 1
 

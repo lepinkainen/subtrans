@@ -112,11 +112,12 @@ def get_wanted_movies(
             # The source subtitle check will happen during movie processing
 
             # Note: path will be empty here, we'll fetch it after user selection
+            # Note: year will be 0 here, we'll fetch it along with path after selection
             movies.append(
                 Movie(
                     radarr_id=item.get("radarrId"),
                     title=item.get("title", "Unknown"),
-                    year=item.get("year", 0),
+                    year=0,  # Will be populated along with path after selection
                     path="",  # Will be populated after selection
                     missing_subtitles=missing_langs,
                     existing_subtitles=item.get("subtitles", []),
@@ -159,6 +160,9 @@ def populate_movie_path(movie: Movie, base_url: str, api_key: str) -> bool:
             for item in movies_list:
                 if item.get("radarrId") == movie.radarr_id:
                     movie.path = item.get("path", "")
+                    # Also populate year if it's missing (year=0)
+                    if movie.year == 0 and item.get("year"):
+                        movie.year = item.get("year")
                     if movie.path:
                         return True
                     else:

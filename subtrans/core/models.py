@@ -45,6 +45,9 @@ class Config:
     )
     min_translation_difference: float = 0.8  # Minimum difference ratio (0.0-1.0)
     log_token_usage: bool = True  # Log API token usage to file for cost tracking
+    # Service tier for OpenAI API pricing: "auto", "flex", "default", "priority"
+    analysis_service_tier: str = "auto"  # Standard pricing for Pass 1 (interactive)
+    translation_service_tier: str = "flex"  # Flex pricing for Pass 2 (50% discount)
 
 
 @dataclass

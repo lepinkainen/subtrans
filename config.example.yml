@@ -7,13 +7,23 @@ bazarr:
 
 # OpenAI settings
 # Note: OPENAI_API_KEY must be set as an environment variable
+#
 # Two-model approach for cost optimization:
-# - gpt-4o handles complex context analysis with rule interpretation
-# - gpt-4o-mini performs cost-effective translation guided by context
+# - gpt-5 handles complex context analysis with rule interpretation
+# - gpt-5 performs cost-effective translation guided by context
+#
+# Service tiers control pricing and performance:
+# - "auto": Standard pricing, fast responses (default for analysis)
+# - "flex": 50% discount, slower responses (default for translation)
+# - "default", "priority": Other available tiers
+#
+# Flex tier also provides automatic prompt caching (90% discount on cached tokens)
 openai:
-  analysis_model: "gpt-4o"      # Pass 1: Context analysis (complex rule interpretation)
-  translation_model: "gpt-4o-mini"  # Pass 2: Translation (cost-optimized)
+  analysis_model: "gpt-5"       # Pass 1: Context analysis (complex rule interpretation)
+  translation_model: "gpt-5"    # Pass 2: Translation (cost-optimized with flex tier)
   batch_size: 50                # Number of subtitles per API call
+  analysis_service_tier: "auto" # Standard tier for Pass 1 (interactive, needs fast responses)
+  translation_service_tier: "flex" # Flex tier for Pass 2 (50% discount, can be slower)
 
 # Language settings
 # ISO 639-1 language codes (2-letter) for source and target languages
