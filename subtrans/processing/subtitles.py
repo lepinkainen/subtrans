@@ -114,6 +114,17 @@ def get_mkv_subtitle_tracks(mkv_path: Path) -> list[SubtitleTrack]:
             if codec.lower() in ("hdmv_pgs_subtitle", "vobsub", "dvd_subtitle"):
                 continue
 
+            # Skip non-SRT text formats (ASS, SSA, WebVTT, etc.)
+            # MKV codec strings: S_TEXT/ASS, S_TEXT/SSA, S_TEXT/WEBVTT
+            # Only support: S_TEXT/UTF8, S_TEXT/SRT (plain SRT format)
+            codec_upper = codec.upper()
+            if (
+                "S_TEXT/ASS" in codec_upper
+                or "S_TEXT/SSA" in codec_upper
+                or "S_TEXT/WEBVTT" in codec_upper
+            ):
+                continue
+
             tracks.append(
                 SubtitleTrack(
                     track_id=track.get("id"),
@@ -215,6 +226,21 @@ def get_source_subtitle(
             console.print(
                 f"[yellow]Using first track: {source_track.language}[/yellow]"
             )
+
+    # Validate codec is supported (SRT format only)
+    codec_upper = source_track.codec.upper()
+    if (
+        "S_TEXT/ASS" in codec_upper
+        or "S_TEXT/SSA" in codec_upper
+        or "S_TEXT/WEBVTT" in codec_upper
+    ):
+        console.print(
+            f"[yellow]Found subtitle track but format not supported: {source_track.codec}[/yellow]"
+        )
+        console.print(
+            "[yellow]Only SRT format subtitles are currently supported[/yellow]"
+        )
+        return None, False
 
     # Check cache first - use cache module function
     cached_srt = get_subtitle_cache_path(mkv_path, source_track.track_id)

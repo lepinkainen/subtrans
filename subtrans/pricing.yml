@@ -1,0 +1,242 @@
+# OpenAI Pricing Configuration
+# Prices are in USD per 1M tokens
+
+# Metadata
+metadata:
+  last_updated: "2025-12-07"  # YYYY-MM-DD format
+  source: "https://platform.openai.com/pricing"
+
+# Pricing structure:
+# Each model can have different pricing tiers based on service_tier:
+# - batch: Batch API pricing
+# - flex: Flex tier (50% discount, slower)
+# - standard: Standard tier (default)
+# - priority: Priority tier (faster, more expensive)
+
+models:
+  # GPT-5 Series
+  gpt-5:
+    batch:
+      input: 0.625
+      cached_input: 0.0625
+      output: 5.00
+    flex:
+      input: 0.625
+      cached_input: 0.0625
+      output: 5.00
+    standard:
+      input: 1.25
+      cached_input: 0.125
+      output: 10.00
+    priority:
+      input: 2.50
+      cached_input: 0.25
+      output: 20.00
+
+  gpt-5.1:
+    batch:
+      input: 0.625
+      cached_input: 0.0625
+      output: 5.00
+    flex:
+      input: 0.625
+      cached_input: 0.0625
+      output: 5.00
+    standard:
+      input: 1.25
+      cached_input: 0.125
+      output: 10.00
+    priority:
+      input: 2.50
+      cached_input: 0.25
+      output: 20.00
+
+  gpt-5-mini:
+    batch:
+      input: 0.125
+      cached_input: 0.0125
+      output: 1.00
+    flex:
+      input: 0.125
+      cached_input: 0.0125
+      output: 1.00
+    standard:
+      input: 0.25
+      cached_input: 0.025
+      output: 2.00
+    priority:
+      input: 0.45
+      cached_input: 0.045
+      output: 3.60
+
+  gpt-5-nano:
+    batch:
+      input: 0.025
+      cached_input: 0.0025
+      output: 0.20
+    flex:
+      input: 0.025
+      cached_input: 0.0025
+      output: 0.20
+    standard:
+      input: 0.05
+      cached_input: 0.005
+      output: 0.40
+
+  # GPT-4.1 Series
+  gpt-4.1:
+    batch:
+      input: 1.00
+      output: 4.00
+    standard:
+      input: 2.00
+      cached_input: 0.50
+      output: 8.00
+    priority:
+      input: 3.50
+      cached_input: 0.875
+      output: 14.00
+
+  gpt-4.1-mini:
+    batch:
+      input: 0.20
+      output: 0.80
+    standard:
+      input: 0.40
+      cached_input: 0.10
+      output: 1.60
+    priority:
+      input: 0.70
+      cached_input: 0.175
+      output: 2.80
+
+  gpt-4.1-nano:
+    batch:
+      input: 0.05
+      output: 0.20
+    standard:
+      input: 0.10
+      cached_input: 0.025
+      output: 0.40
+    priority:
+      input: 0.20
+      cached_input: 0.05
+      output: 0.80
+
+  # GPT-4o Series
+  gpt-4o:
+    batch:
+      input: 1.25
+      output: 5.00
+    standard:
+      input: 2.50
+      cached_input: 1.25
+      output: 10.00
+    priority:
+      input: 4.25
+      cached_input: 2.125
+      output: 17.00
+
+  gpt-4o-mini:
+    batch:
+      input: 0.075
+      output: 0.30
+    standard:
+      input: 0.15
+      cached_input: 0.075
+      output: 0.60
+    priority:
+      input: 0.25
+      cached_input: 0.125
+      output: 1.00
+
+  # O-series (Reasoning models)
+  o1:
+    batch:
+      input: 7.50
+      output: 30.00
+    standard:
+      input: 15.00
+      cached_input: 7.50
+      output: 60.00
+
+  o3:
+    batch:
+      input: 1.00
+      output: 4.00
+    flex:
+      input: 1.00
+      cached_input: 0.25
+      output: 4.00
+    standard:
+      input: 2.00
+      cached_input: 0.50
+      output: 8.00
+    priority:
+      input: 3.50
+      cached_input: 0.875
+      output: 14.00
+
+  o4-mini:
+    batch:
+      input: 0.55
+      output: 2.20
+    flex:
+      input: 0.55
+      cached_input: 0.138
+      output: 2.20
+    standard:
+      input: 1.10
+      cached_input: 0.275
+      output: 4.40
+    priority:
+      input: 2.00
+      cached_input: 0.50
+      output: 8.00
+
+  o3-mini:
+    batch:
+      input: 0.55
+      output: 2.20
+    standard:
+      input: 1.10
+      cached_input: 0.55
+      output: 4.40
+
+  o1-mini:
+    batch:
+      input: 0.55
+      output: 2.20
+    standard:
+      input: 1.10
+      cached_input: 0.55
+      output: 4.40
+
+  # Legacy GPT-3.5
+  gpt-3.5-turbo:
+    batch:
+      input: 0.25
+      output: 0.75
+    standard:
+      input: 0.50
+      output: 1.50
+
+  gpt-3.5-turbo-0125:
+    batch:
+      input: 0.25
+      output: 0.75
+    standard:
+      input: 0.50
+      output: 1.50
+
+# Service tier aliases for mapping OpenAI API service_tier values
+# "auto" tier uses standard pricing
+service_tier_aliases:
+  auto: standard
+  default: standard
+
+# Fallback pricing for unknown models (use gpt-4o pricing)
+fallback:
+  input: 2.50
+  cached_input: 1.25
+  output: 10.00

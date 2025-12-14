@@ -314,6 +314,7 @@ Requirements:
                     if response.usage.prompt_tokens_details is not None
                     else 0
                 ),
+                service_tier=service_tier,
             )
 
         # Extract formality: use formality_recommendation for Finnish, formality_guidance for others
@@ -724,6 +725,7 @@ Third subtitle translation here"""
                                 else 0
                             ),
                             batch_number=batch_num,
+                            service_tier=service_tier,
                         )
 
                     break

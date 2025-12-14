@@ -1,10 +1,52 @@
 """File output operations for translated subtitles."""
 
+import re
 from pathlib import Path
 
 import pysrt
 
 from ..core.utils import console, CACHE_DIR
+
+
+def check_translation_exists(
+    movie_path: str | Path,
+    movie_title: str,
+    movie_year: int,
+    target_lang: str = "fi",
+) -> tuple[bool, Path | None]:
+    """
+    Check if translated subtitle already exists.
+
+    Checks both primary location (movie directory) and fallback cache.
+
+    Args:
+        movie_path: Path to movie file or directory
+        movie_title: Movie title for cache lookup
+        movie_year: Movie year for cache lookup
+        target_lang: Target language code (default: "fi")
+
+    Returns:
+        Tuple of (exists: bool, found_path: Path | None)
+    """
+    from .subtitles import find_mkv_file
+
+    # Check primary location (movie directory)
+    # First verify the movie file exists (NAS might not be mounted)
+    mkv_path = find_mkv_file(str(movie_path))
+    if mkv_path and mkv_path.exists():
+        # Movie file exists, check for translation
+        primary_path = mkv_path.parent / f"{mkv_path.stem}.{target_lang}.srt"
+        if primary_path.exists():
+            return True, primary_path
+    # If mkv_path doesn't exist, NAS likely not mounted - skip primary check
+
+    # Check fallback cache location
+    sanitized_title = re.sub(r"[^\w\s]", "", movie_title).replace(" ", "_")
+    cache_path = CACHE_DIR / f"{sanitized_title}_{movie_year}.{target_lang}.srt"
+    if cache_path.exists():
+        return True, cache_path
+
+    return False, None
 
 
 def save_translated_subtitle(

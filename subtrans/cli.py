@@ -3,6 +3,7 @@
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
 
 import pysrt
@@ -20,6 +21,7 @@ from .core.config import load_config
 from .core.models import Movie
 from .core.utils import console
 from .core.cache import load_cached_context, save_context_cache, get_context_cache_path
+from .core.token_logger import get_detailed_token_stats, get_pricing_age_info
 from .integrations.bazarr import (
     get_wanted_movies,
     populate_movie_path,
@@ -27,8 +29,155 @@ from .integrations.bazarr import (
 )
 from .processing.subtitles import get_source_subtitle, find_mkv_file
 from .processing.translator import analyze_subtitles, translate_subtitles_batch
+from .processing.output import check_translation_exists
 from .processing.output import save_translated_subtitle
 from .selection import select_movies_fzf
+
+
+def display_token_stats(movie_filter: str | None = None) -> None:
+    """
+    Display detailed token usage statistics and costs.
+
+    Args:
+        movie_filter: Optional movie title filter
+    """
+
+    console.print("\n[bold blue]Token Usage Statistics[/bold blue]\n")
+
+    stats = get_detailed_token_stats(movie_filter)
+
+    if stats["total_operations"] == 0:
+        console.print("[yellow]No token usage data found.[/yellow]")
+        console.print(
+            "[dim]Token usage is logged to ~/.cache/subtrans/token_usage.jsonl[/dim]"
+        )
+        return
+
+    # Overall summary
+    summary_table = Table(title="Overall Summary", show_header=False)
+    summary_table.add_column("Metric", style="cyan")
+    summary_table.add_column("Value", style="green")
+
+    summary_table.add_row("Total Movies", str(stats["total_movies"]))
+    summary_table.add_row("Total Operations", str(stats["total_operations"]))
+    summary_table.add_row("Total Cost", f"${stats['total_cost']:.4f}")
+
+    console.print(summary_table)
+    console.print()
+
+    # By Phase
+    if stats["by_phase"]:
+        phase_table = Table(title="By Phase")
+        phase_table.add_column("Phase", style="cyan")
+        phase_table.add_column("Operations", justify="right")
+        phase_table.add_column("Input Tokens", justify="right", style="yellow")
+        phase_table.add_column("Output Tokens", justify="right", style="yellow")
+        phase_table.add_column("Cached Tokens", justify="right", style="green")
+        phase_table.add_column("Cost", justify="right", style="green")
+
+        for phase, data in sorted(stats["by_phase"].items()):
+            phase_table.add_row(
+                phase.capitalize(),
+                str(data["operations"]),
+                f"{data['input_tokens']:,}",
+                f"{data['output_tokens']:,}",
+                f"{data['cached_tokens']:,}",
+                f"${data['cost']:.4f}",
+            )
+
+        console.print(phase_table)
+        console.print()
+
+    # By Model
+    if stats["by_model"]:
+        model_table = Table(title="By Model")
+        model_table.add_column("Model", style="cyan")
+        model_table.add_column("Operations", justify="right")
+        model_table.add_column("Input Tokens", justify="right", style="yellow")
+        model_table.add_column("Output Tokens", justify="right", style="yellow")
+        model_table.add_column("Cached Tokens", justify="right", style="green")
+        model_table.add_column("Cost", justify="right", style="green")
+
+        for model, data in sorted(
+            stats["by_model"].items(), key=lambda x: x[1]["cost"], reverse=True
+        ):
+            model_table.add_row(
+                model,
+                str(data["operations"]),
+                f"{data['input_tokens']:,}",
+                f"{data['output_tokens']:,}",
+                f"{data['cached_tokens']:,}",
+                f"${data['cost']:.4f}",
+            )
+
+        console.print(model_table)
+        console.print()
+
+    # By Movie (limit to top 20 most expensive)
+    if stats["by_movie"]:
+        movie_table = Table(title="By Movie (Top 20 Most Expensive)")
+        movie_table.add_column("Movie", style="cyan")
+        movie_table.add_column("Operations", justify="right")
+        movie_table.add_column("Input Tokens", justify="right", style="yellow")
+        movie_table.add_column("Output Tokens", justify="right", style="yellow")
+        movie_table.add_column("Cached Tokens", justify="right", style="green")
+        movie_table.add_column("Cost", justify="right", style="green")
+
+        # Sort by cost, descending, and take top 20
+        sorted_movies = sorted(
+            stats["by_movie"].items(), key=lambda x: x[1]["cost"], reverse=True
+        )[:20]
+
+        for movie, data in sorted_movies:
+            movie_table.add_row(
+                movie,
+                str(data["operations"]),
+                f"{data['input_tokens']:,}",
+                f"{data['output_tokens']:,}",
+                f"{data['cached_tokens']:,}",
+                f"${data['cost']:.4f}",
+            )
+
+        console.print(movie_table)
+
+    console.print()
+
+    # Display pricing age information
+    pricing_info = get_pricing_age_info()
+    if pricing_info["last_updated"]:
+        days_old = pricing_info["days_old"]
+        date_str = pricing_info["last_updated"]
+
+        if days_old is not None:
+            if days_old == 0:
+                age_str = "today"
+                style = "green"
+            elif days_old == 1:
+                age_str = "1 day old"
+                style = "green"
+            elif days_old < 30:
+                age_str = f"{days_old} days old"
+                style = "green"
+            elif days_old < 90:
+                age_str = f"{days_old} days old"
+                style = "yellow"
+            else:
+                age_str = f"{days_old} days old"
+                style = "red"
+
+            console.print(
+                f"[{style}]Using price information from {date_str} ({age_str})[/{style}]"
+            )
+        else:
+            console.print(f"[dim]Using price information from {date_str}[/dim]")
+    else:
+        console.print(
+            "[yellow]Warning: Pricing data does not include last_updated date[/yellow]"
+        )
+
+    console.print(
+        "[dim]Cached tokens benefit from 90% discount. Prices shown are per-token actual costs.[/dim]"
+    )
 
 
 def select_movies_legacy(movies: list[Movie], target_lang: str = "fi") -> list[Movie]:
@@ -122,6 +271,8 @@ def process_movie_phase1(
     target_lang: str = "fi",
     log_token_usage: bool = True,
     service_tier: str = "auto",
+    total_movies: int = 1,
+    current_index: int = 1,
 ) -> bool:
     """
     Phase 1: Extract subtitle, analyze context, display for user review.
@@ -139,12 +290,18 @@ def process_movie_phase1(
         target_lang: Target language code (ISO 639-1/2)
         log_token_usage: Log API token usage for cost tracking
         service_tier: OpenAI API service tier ("auto", "flex", "default", "priority")
+        current_index: Current movie number (1-indexed)
 
     Returns:
         True if user approved (or extract_only), False if cancelled/error
     """
     console.print(f"\n[bold blue]{'=' * 60}[/bold blue]")
-    console.print(f"[bold blue]Processing: {movie.title} ({movie.year})[/bold blue]")
+    progress_indicator = (
+        f" ({current_index}/{total_movies})" if total_movies > 1 else ""
+    )
+    console.print(
+        f"[bold blue]Processing: {movie.title} ({movie.year}){progress_indicator}[/bold blue]"
+    )
 
     # Apply path mapping
     original_path = movie.path
@@ -174,6 +331,14 @@ def process_movie_phase1(
             return False
 
     console.print(f"[green]Loaded {len(subs)} subtitle entries[/green]")
+
+    # Validate we have subtitle entries
+    if len(subs) == 0:
+        console.print(
+            "[red]Error: No subtitle entries found - file may be in unsupported format[/red]"
+        )
+        console.print("[yellow]Supported format: SRT (.srt files)[/yellow]")
+        return False
 
     if extract_only:
         console.print(
@@ -211,7 +376,14 @@ def process_movie_phase1(
         else:
             console.print("[blue]Using cached context from previous analysis[/blue]")
 
-        # Always show context and wait for user approval in Phase 1
+            # Auto-accept cached contexts when batch processing
+            if total_movies > 1:
+                console.print(
+                    "[green]Auto-accepting cached context (batch mode)[/green]"
+                )
+                return True  # Auto-approved
+
+        # Show context and wait for user approval (single movie OR fresh context)
         if context and context.raw_json:
             from rich.json import JSON
             from rich.panel import Panel
@@ -495,6 +667,8 @@ def process_movie_phase2(
     min_translation_difference: float = 0.8,
     log_token_usage: bool = True,
     service_tier: str = "flex",
+    total_movies: int = 1,
+    current_index: int = 1,
 ) -> bool:
     """
     Phase 2: Load cached context, translate subtitles, save output.
@@ -512,12 +686,19 @@ def process_movie_phase2(
         min_translation_difference: Minimum difference ratio (0.0-1.0)
         log_token_usage: Log API token usage for cost tracking
         service_tier: OpenAI API service tier ("auto", "flex", "default", "priority")
+        total_movies: Total number of movies being processed
+        current_index: Current movie number (1-indexed)
 
     Returns:
         True if translation succeeded, False otherwise
     """
     console.print(f"\n[bold blue]{'=' * 60}[/bold blue]")
-    console.print(f"[bold blue]Translating: {movie.title} ({movie.year})[/bold blue]")
+    progress_indicator = (
+        f" ({current_index}/{total_movies})" if total_movies > 1 else ""
+    )
+    console.print(
+        f"[bold blue]Translating: {movie.title} ({movie.year}){progress_indicator}[/bold blue]"
+    )
 
     # Apply path mapping
     original_path = movie.path
@@ -527,6 +708,16 @@ def process_movie_phase2(
     console.print(f"Path: {movie.path}")
     if movie.path != original_path:
         console.print(f"[dim](Original: {original_path})[/dim]")
+
+    # Check if translation already exists
+    exists, existing_path = check_translation_exists(
+        movie.path, movie.title, movie.year, target_lang=target_lang
+    )
+
+    if exists:
+        console.print(f"[yellow]Translation already exists: {existing_path}[/yellow]")
+        console.print("[yellow]Skipping re-translation[/yellow]")
+        return True  # Success - movie already translated
 
     # Get source language subtitle (should be in cache from Phase 1)
     srt_path, is_temp = get_source_subtitle(movie, source_lang)
@@ -547,6 +738,14 @@ def process_movie_phase2(
             return False
 
     console.print(f"[green]Loaded {len(subs)} subtitle entries[/green]")
+
+    # Validate we have subtitle entries
+    if len(subs) == 0:
+        console.print(
+            "[red]Error: No subtitle entries found - file may be in unsupported format[/red]"
+        )
+        console.print("[yellow]Supported format: SRT (.srt files)[/yellow]")
+        return False
 
     if dry_run:
         console.print("[yellow]Dry run - skipping translation[/yellow]")
@@ -625,8 +824,25 @@ def main():
         action="store_true",
         help="Force fzf-style interface even if terminal detection fails",
     )
+    parser.add_argument(
+        "--stats",
+        "-s",
+        action="store_true",
+        help="Display token usage statistics and costs, then exit",
+    )
+    parser.add_argument(
+        "--movie",
+        "-m",
+        type=str,
+        help="Filter statistics by movie title (use with --stats)",
+    )
 
     args = parser.parse_args()
+
+    # Handle --stats option (doesn't require config)
+    if args.stats:
+        display_token_stats(args.movie)
+        return
 
     # Load configuration
     config = load_config(args.config)
@@ -716,7 +932,8 @@ def main():
     if args.extract_only:
         console.print("\n[bold blue]Extract-Only Mode: Caching Subtitles[/bold blue]")
         extract_count = 0
-        for movie in selected:
+        total_selected = len(selected)
+        for idx, movie in enumerate(selected, start=1):
             if process_movie_phase1(
                 movie,
                 client,
@@ -730,6 +947,8 @@ def main():
                 target_lang=config.target_language,
                 log_token_usage=config.log_token_usage,
                 service_tier=config.analysis_service_tier,
+                total_movies=total_selected,
+                current_index=idx,
             ):
                 extract_count += 1
         console.print(
@@ -740,8 +959,9 @@ def main():
     # Phase 1: Context Analysis for ALL movies
     console.print("\n[bold blue]Phase 1: Context Analysis[/bold blue]")
     approved_movies = []
+    total_movies = len(selected)
 
-    for movie in selected:
+    for idx, movie in enumerate(selected, start=1):
         if process_movie_phase1(
             movie,
             client,
@@ -755,6 +975,8 @@ def main():
             target_lang=config.target_language,
             log_token_usage=config.log_token_usage,
             service_tier=config.analysis_service_tier,
+            total_movies=total_movies,
+            current_index=idx,
         ):
             approved_movies.append(movie)
 
@@ -770,8 +992,12 @@ def main():
     # Phase 2: Translation for approved movies
     console.print("\n[bold blue]Phase 2: Translation[/bold blue]")
     success_count = 0
+    total_approved = len(approved_movies)
 
-    for movie in approved_movies:
+    # Start timing Phase 2
+    phase2_start = time.time()
+
+    for idx, movie in enumerate(approved_movies, start=1):
         if process_movie_phase2(
             movie,
             client,
@@ -785,11 +1011,20 @@ def main():
             min_translation_difference=config.min_translation_difference,
             log_token_usage=config.log_token_usage,
             service_tier=config.translation_service_tier,
+            total_movies=total_approved,
+            current_index=idx,
         ):
             success_count += 1
 
+    # Calculate elapsed time
+    phase2_elapsed = time.time() - phase2_start
+    hours = int(phase2_elapsed // 3600)
+    minutes = int((phase2_elapsed % 3600) // 60)
+    seconds = int(phase2_elapsed % 60)
+    elapsed_str = f"{hours}:{minutes:02d}:{seconds:02d}"
+
     console.print(
-        f"\n[bold]Completed: {success_count}/{len(approved_movies)} movies translated[/bold]"
+        f"\n[bold]Completed: {success_count}/{len(approved_movies)} movies translated (elapsed: {elapsed_str})[/bold]"
     )
 
 
