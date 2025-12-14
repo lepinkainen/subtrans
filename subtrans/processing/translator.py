@@ -1,6 +1,7 @@
 """Translation logic using OpenAI GPT models."""
 
 import json
+import re
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -9,13 +10,6 @@ from typing import Any, Literal, cast
 import pysrt
 from openai import APIStatusError, OpenAI, RateLimitError
 from openai.types.chat.chat_completion import ChatCompletion
-from rich.progress import (
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    BarColumn,
-    TimeRemainingColumn,
-)
 
 from ..core.models import TranslationContext
 from ..core.token_logger import log_token_usage as log_tokens
@@ -104,6 +98,153 @@ def _validate_translation_quality(
     is_valid = difference >= min_difference
 
     return is_valid, difference
+
+
+def _is_likely_separator(text: str) -> bool:
+    """
+    Detect if a line is likely a separator rather than translation content.
+
+    Handles any separator pattern GPT might use, not just known formats.
+    This enables liberal parsing - we accept responses with unexpected
+    separator formats as long as we can extract the correct count.
+
+    Patterns indicating separators:
+    - Known markers: "[NEXT]", empty strings
+    - Lines with no word characters (only punctuation/whitespace)
+    - Repeated character patterns (---, ***, ===, +++, ###, etc.)
+
+    Args:
+        text: Line to check
+
+    Returns:
+        True if likely a separator, False if likely content
+
+    Examples:
+        >>> _is_likely_separator("---")
+        True
+        >>> _is_likely_separator("+++")  # Handles unexpected formats
+        True
+        >>> _is_likely_separator("Hei maailma")
+        False
+        >>> _is_likely_separator("...")  # Conservative: treat as separator
+        True
+        >>> _is_likely_separator("Hmm...")  # Has word char, not a separator
+        False
+    """
+    stripped = text.strip()
+
+    # Empty or known markers
+    if stripped in ("[NEXT]", ""):
+        return True
+
+    # No word characters = likely separator (handles ---, ***, ===, +++, etc.)
+    # This is the key check: any line with only punctuation/whitespace
+    if not re.search(r"\w", stripped):
+        return True
+
+    # Repeated character patterns (3+ same char): ---, ***, ===, AAA, etc.
+    # Regex: ^(.)\1{2,}$ means "same char repeated 3+ times"
+    # This catches edge cases like "aaa" or "111" that might slip through
+    if re.match(r"^(.)\1{2,}$", stripped):
+        return True
+
+    return False
+
+
+def _is_valid_translation_content(text: str) -> bool:
+    """
+    Check if text is valid translation content (not a separator/marker).
+
+    CRITICAL: This validation ensures GPT returned actual translation content,
+    not just timestamps, separators, or empty strings. Even if it's just a
+    sound effect or single word, it must contain word characters.
+
+    Args:
+        text: Text to validate
+
+    Returns:
+        True if text contains actual content, False if it's a separator/marker
+
+    Examples:
+        >>> _is_valid_translation_content("Hei")  # Valid: single word
+        True
+        >>> _is_valid_translation_content("Hmm...")  # Valid: has word char
+        True
+        >>> _is_valid_translation_content("---")  # Invalid: separator
+        False
+        >>> _is_valid_translation_content("   ")  # Invalid: empty
+        False
+    """
+    # Use centralized separator detection
+    # This checks for word characters, so sound effects like "Hmm" pass
+    return not _is_likely_separator(text)
+
+
+def _parse_translation_response(translated_text: str, expected_count: int) -> list[str]:
+    """
+    Parse API response into individual translations.
+
+    Handles multiple separator formats:
+    - \\n[NEXT]\\n (recommended)
+    - [NEXT] (without newlines)
+    - \\n---\\n (markdown separator)
+    - Fallback: split by newlines and filter separators
+
+    Args:
+        translated_text: Raw response from the API
+        expected_count: Expected number of translations
+
+    Returns:
+        List of parsed translations
+
+    Raises:
+        ValueError: If count doesn't match or invalid content detected
+    """
+    if not translated_text.strip():
+        raise ValueError(f"Expected {expected_count} translations, got empty response")
+
+    translations: list[str] = []
+
+    # Strategy 1: Try splitting by [NEXT] with newlines
+    translations = [t.strip() for t in translated_text.split("\n[NEXT]\n") if t.strip()]
+
+    # Strategy 2: Try splitting by [NEXT] without newlines
+    if len(translations) == 1 and expected_count > 1:
+        translations = [t.strip() for t in translated_text.split("[NEXT]") if t.strip()]
+
+    # Strategy 3: Try splitting by markdown separator ---
+    if len(translations) == 1 and expected_count > 1:
+        translations = [
+            t.strip() for t in translated_text.split("\n---\n") if t.strip()
+        ]
+
+    # Strategy 4: Fallback - split by newlines and filter likely separators
+    if len(translations) == 1 and expected_count > 1:
+        fallback_translations = [
+            t.strip()
+            for t in translated_text.split("\n")
+            if t.strip() and not _is_likely_separator(t.strip())
+        ]
+        # Only use fallback if it gives exactly the right count
+        if len(fallback_translations) == expected_count:
+            translations = fallback_translations
+
+    # Validate count
+    if len(translations) != expected_count:
+        console.print(f"[yellow]Response preview: {translated_text[:300]}...[/yellow]")
+        raise ValueError(
+            f"Expected {expected_count} translations, got {len(translations)}"
+        )
+
+    # Validate content - ensure no separators are in the parsed translations
+    for i, trans in enumerate(translations):
+        if not _is_valid_translation_content(trans):
+            raise ValueError(
+                f"Translation {i + 1} contains invalid content: '{trans}' "
+                "(appears to be a separator, not actual translation)"
+            )
+
+    return translations
 
 
 def load_analysis_prompt(source_lang: str, target_lang: str) -> str:
@@ -619,176 +760,138 @@ Third subtitle translation here"""
         f"[blue]Pass 2: Translating {len(subs)} subtitles in {total_batches} batches...[/blue]"
     )
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TextColumn("•"),
-        TextColumn("{task.completed}/{task.total} batches"),
-        TextColumn("•"),
-        TimeRemainingColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Translating", total=total_batches)
+    for i in range(0, len(subs), batch_size):
+        batch = subs[i : i + batch_size]
+        batch_num = i // batch_size + 1
+        batch_start_time = time.time()
 
-        for i in range(0, len(subs), batch_size):
-            batch = subs[i : i + batch_size]
+        # Print batch start message
+        console.print(f"Batch ({batch_num:02d}/{total_batches:02d}) translating...")
 
-            # Prepare batch text with clear separators
-            batch_texts = [sub.text.replace("\n", " ") for sub in batch]
-            input_text = "\n[NEXT]\n".join(batch_texts)
+        # Prepare batch text with clear separators
+        batch_texts = [sub.text.replace("\n", " ") for sub in batch]
+        input_text = "\n[NEXT]\n".join(batch_texts)
 
-            # Add context about position in movie
-            position_note = ""
-            if i == 0:
-                position_note = "(Beginning of movie)\n\n"
-            elif i + batch_size >= len(subs):
-                position_note = "(End of movie)\n\n"
+        # Add context about position in movie
+        position_note = ""
+        if i == 0:
+            position_note = "(Beginning of movie)\n\n"
+        elif i + batch_size >= len(subs):
+            position_note = "(End of movie)\n\n"
 
-            translations: list[str] | None = None
+        translations: list[str] | None = None
 
-            for attempt in range(2):
-                try:
-                    response = _call_with_retries(
-                        lambda: client.chat.completions.create(
-                            model=model,
-                            messages=[
-                                {"role": "system", "content": system_prompt},
-                                {
-                                    "role": "user",
-                                    "content": f"{position_note}Translate to {target_lang}:\n\n{input_text}",
-                                },
-                            ],
-                            service_tier=tier,
-                            timeout=timeout,
-                        )
+        for attempt in range(2):
+            try:
+                response = _call_with_retries(
+                    lambda: client.chat.completions.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {
+                                "role": "user",
+                                "content": f"{position_note}Translate to {target_lang}:\n\n{input_text}",
+                            },
+                        ],
+                        service_tier=tier,
+                        timeout=timeout,
                     )
-                    response = cast(ChatCompletion, response)
+                )
+                response = cast(ChatCompletion, response)
 
-                    content = response.choices[0].message.content
-                    if content is None:
-                        raise ValueError(
-                            "OpenAI API returned empty content for translation"
-                        )
-                    translated_text = content.strip()
+                content = response.choices[0].message.content
+                if content is None:
+                    raise ValueError(
+                        "OpenAI API returned empty content for translation"
+                    )
+                translated_text = content.strip()
 
-                    # Try splitting by separator with newlines
-                    translations = [
-                        t.strip()
-                        for t in translated_text.split("\n[NEXT]\n")
-                        if t.strip()
-                    ]
+                # Parse response using new centralized function with validation
+                translations = _parse_translation_response(
+                    translated_text, expected_count=len(batch)
+                )
 
-                    # If that didn't work, try without newlines
-                    if len(translations) == 1 and len(batch) > 1:
-                        translations = [
-                            t.strip()
-                            for t in translated_text.split("[NEXT]")
-                            if t.strip()
-                        ]
+                # Log token usage for cost tracking
+                if log_token_usage and response.usage:
+                    log_tokens(
+                        movie_title=movie_title,
+                        movie_year=movie_year or 0,
+                        phase="translation",
+                        model=model,
+                        input_tokens=response.usage.prompt_tokens,
+                        output_tokens=response.usage.completion_tokens,
+                        cached_tokens=(
+                            response.usage.prompt_tokens_details.cached_tokens or 0
+                            if response.usage.prompt_tokens_details is not None
+                            else 0
+                        ),
+                        batch_number=batch_num,
+                        service_tier=service_tier,
+                    )
 
-                    # Last resort: try splitting by newlines
-                    if len(translations) == 1 and len(batch) > 1:
-                        fallback_translations = [
-                            t.strip()
-                            for t in translated_text.split("\n")
-                            if t.strip() and t.strip() != "[NEXT]"
-                        ]
-                        # ONLY use fallback if it gives exactly the right count
-                        if len(fallback_translations) == len(batch):
-                            translations = fallback_translations
-                        # Otherwise keep as 1 item, will trigger error and retry
+                break
 
-                    if len(translations) != len(batch):
-                        # Log first 300 chars of response for debugging
-                        console.print(
-                            f"[yellow]Response preview: {translated_text[:300]}...[/yellow]"
-                        )
-                        raise ValueError(
-                            f"Expected {len(batch)} translations, got {len(translations)}"
-                        )
-
-                    # Log token usage for cost tracking
-                    if log_token_usage and response.usage:
-                        batch_num = i // batch_size + 1
-                        log_tokens(
-                            movie_title=movie_title,
-                            movie_year=movie_year or 0,
-                            phase="translation",
-                            model=model,
-                            input_tokens=response.usage.prompt_tokens,
-                            output_tokens=response.usage.completion_tokens,
-                            cached_tokens=(
-                                response.usage.prompt_tokens_details.cached_tokens or 0
-                                if response.usage.prompt_tokens_details is not None
-                                else 0
-                            ),
-                            batch_number=batch_num,
-                            service_tier=service_tier,
-                        )
-
-                    break
-
-                except RateLimitError as e:
-                    batch_num = i // batch_size + 1
+            except RateLimitError as e:
+                console.print(
+                    f"\n[red]OpenAI API quota exceeded at batch {batch_num}![/red]\n"
+                    "You have exceeded your current OpenAI API quota.\n"
+                    "Please check your plan and billing details at:\n"
+                    "https://platform.openai.com/account/billing\n\n"
+                    f"Progress: {batch_num - 1}/{total_batches} batches completed.\n"
+                )
+                raise SystemExit(1) from e
+            except Exception as e:
+                translations = None
+                if attempt == 1:
                     console.print(
-                        f"\n[red]OpenAI API quota exceeded at batch {batch_num}![/red]\n"
-                        "You have exceeded your current OpenAI API quota.\n"
-                        "Please check your plan and billing details at:\n"
-                        "https://platform.openai.com/account/billing\n\n"
-                        f"Progress: {batch_num - 1}/{total_batches} batches completed.\n"
+                        f"[red]Translation error in batch {batch_num}: {e}[/red]"
                     )
-                    raise SystemExit(1) from e
-                except Exception as e:
-                    translations = None
-                    if attempt == 1:
-                        console.print(
-                            f"[red]Translation error in batch {i // batch_size + 1}: {e}[/red]"
-                        )
-                    else:
-                        delay = min(2**attempt, 5)
-                        console.print(
-                            f"[yellow]Retrying batch {i // batch_size + 1} after error: {e}[/yellow]"
-                        )
-                        _sleep(delay)
+                else:
+                    delay = min(2**attempt, 5)
+                    console.print(
+                        f"[yellow]Retrying batch {batch_num} after error: {e}[/yellow]"
+                    )
+                    _sleep(delay)
 
-            if translations is None:
-                # Keep original text on error
-                for sub in batch:
-                    translated.append(sub)
-            else:
-                # Validate batch quality if enabled (compare entire batch at once)
-                if validate_translation:
-                    # Combine original batch texts
-                    original_batch_text = " ".join(sub.text for sub in batch)
-                    # Combine translated batch texts
-                    translated_batch_text = " ".join(translations)
+        if translations is None:
+            # Keep original text on error
+            for sub in batch:
+                translated.append(sub)
+        else:
+            # Validate batch quality if enabled (compare entire batch at once)
+            if validate_translation:
+                # Combine original batch texts
+                original_batch_text = " ".join(sub.text for sub in batch)
+                # Combine translated batch texts
+                translated_batch_text = " ".join(translations)
 
-                    # Check if entire batch is sufficiently different
-                    is_valid, difference = _validate_translation_quality(
-                        original_batch_text,
-                        translated_batch_text,
-                        min_difference=min_translation_difference,
+                # Check if entire batch is sufficiently different
+                is_valid, difference = _validate_translation_quality(
+                    original_batch_text,
+                    translated_batch_text,
+                    min_difference=min_translation_difference,
+                )
+
+                if not is_valid:
+                    console.print(
+                        f"[yellow]Warning: Batch {batch_num} appears untranslated "
+                        f"(only {difference:.1%} different from original)[/yellow]"
                     )
 
-                    if not is_valid:
-                        batch_num = i // batch_size + 1
-                        console.print(
-                            f"[yellow]Warning: Batch {batch_num} appears untranslated "
-                            f"(only {difference:.1%} different from original)[/yellow]"
-                        )
+            # Create translated subtitle items
+            for j, sub in enumerate(batch):
+                new_sub = pysrt.SubRipItem(
+                    index=sub.index,
+                    start=sub.start,
+                    end=sub.end,
+                    text=translations[j].strip(),
+                )
+                translated.append(new_sub)
 
-                # Create translated subtitle items
-                for j, sub in enumerate(batch):
-                    new_sub = pysrt.SubRipItem(
-                        index=sub.index,
-                        start=sub.start,
-                        end=sub.end,
-                        text=translations[j].strip(),
-                    )
-                    translated.append(new_sub)
-
-            progress.update(task, advance=1)
+        # Print batch completion message with elapsed time
+        batch_elapsed = time.time() - batch_start_time
+        console.print(
+            f"Batch ({batch_num:02d}/{total_batches:02d}) translated ({batch_elapsed:.1f}s)"
+        )
 
     return translated
