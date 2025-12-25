@@ -8,58 +8,6 @@ from ..core.models import Movie
 from ..core.utils import console
 
 
-def _has_source_subtitle(
-    existing_subtitles: list[dict], source_lang: str
-) -> tuple[bool, list[str]]:
-    """
-    Check if a movie has subtitles in the source language.
-
-    Checks multiple language code fields (code2, code3, language) and handles
-    null values gracefully. Supports both 2-letter (en) and 3-letter (eng)
-    ISO 639 codes, as well as full language names (English).
-
-    Args:
-        existing_subtitles: List of subtitle dicts from Bazarr API
-            Each dict may contain: code2, code3, language, path
-        source_lang: Source language code (ISO 639-1/2, e.g., "en")
-
-    Returns:
-        Tuple of (has_source_subtitle, found_language_codes)
-        - has_source_subtitle: True if source language subtitle exists
-        - found_language_codes: List of all language codes found (for logging)
-
-    Example:
-        >>> _has_source_subtitle([{"code2": "en", "code3": "eng"}], "en")
-        (True, ["en"])
-        >>> _has_source_subtitle([{"code2": "fr"}], "en")
-        (False, ["fr"])
-    """
-    found_langs = []
-    source_lang_lower = source_lang.lower()
-
-    for subtitle in existing_subtitles:
-        # Check code2, code3, language fields in order
-        lang = (
-            subtitle.get("code2")
-            or subtitle.get("code3")
-            or subtitle.get("language")
-            or ""
-        )
-
-        # Skip empty/null values
-        if not lang:
-            continue
-
-        lang = lang.lower()
-        found_langs.append(lang)
-
-        # Check for match: exact or prefix (handles "eng", "english")
-        if lang == source_lang_lower or lang.startswith(source_lang_lower):
-            return True, found_langs
-
-    return False, found_langs
-
-
 def get_wanted_movies(
     base_url: str, api_key: str, source_lang: str = "en", target_lang: str = "fi"
 ) -> list[Movie]:

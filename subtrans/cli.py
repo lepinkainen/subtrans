@@ -18,7 +18,7 @@ from rich.progress import (
 from rich.table import Table
 
 from .core.config import load_config
-from .core.models import Movie
+from .core.models import Config, Movie
 from .core.utils import console
 from .core.cache import load_cached_context, save_context_cache, get_context_cache_path
 from .core.token_logger import get_detailed_token_stats, get_pricing_age_info
@@ -258,9 +258,116 @@ def select_movies_interactive(
     return select_movies_fzf(movies, target_lang, force_fzf=force_fzf)
 
 
+def load_and_validate_subtitle(
+    srt_path: Path,
+    min_subtitle_count: int,
+    strict_validation: bool,
+) -> tuple[pysrt.SubRipFile | None, int]:
+    """
+    Load and validate subtitle file with encoding fallback and user prompts.
+
+    Handles:
+    - UTF-8/latin-1 encoding fallback
+    - Entry count validation
+    - Interactive prompts for strict validation mode
+    - Cache management (deletion for re-extraction)
+
+    Args:
+        srt_path: Path to SRT file to load
+        min_subtitle_count: Minimum entries expected (typically 50 for movies)
+        strict_validation: If True, prompt user on validation failures
+
+    Returns:
+        Tuple of (loaded_subtitles, entry_count)
+        - loaded_subtitles: SubRipFile object or None if loading failed/user skipped
+        - entry_count: Number of entries found (0 if failed)
+
+    User can choose to:
+    - Continue anyway (overlook validation warning)
+    - Re-extract from MKV (delete cache, return None)
+    - Skip movie (return None)
+    """
+    try:
+        # Load subtitle file
+        console.print(f"[blue]Loading subtitle: {srt_path}[/blue]")
+        subs = pysrt.open(srt_path, encoding="utf-8")
+    except Exception:
+        try:
+            subs = pysrt.open(srt_path, encoding="latin-1")
+        except Exception as e:
+            console.print(f"[red]Error loading subtitle: {e}[/red]")
+            return None, 0
+
+    entry_count = len(subs)
+    console.print(f"[green]Loaded {entry_count} subtitle entries[/green]")
+
+    # Enhanced validation with user override option
+    if entry_count == 0:
+        console.print(
+            "[red]Error: No subtitle entries found - file may be in unsupported format[/red]"
+        )
+        console.print("[yellow]Supported format: SRT (.srt files)[/yellow]")
+        return None, 0
+
+    if entry_count < min_subtitle_count:
+        warning_msg = (
+            f"[yellow]Warning: Only {entry_count} subtitle entries found "
+            f"(expected at least {min_subtitle_count} for typical movies)[/yellow]"
+        )
+        console.print(warning_msg)
+        console.print(
+            "[yellow]This could indicate a corrupted cache, incomplete extraction, "
+            "or a very short video (trailer, short film, etc.)[/yellow]"
+        )
+
+        if strict_validation:
+            # Strict mode: ask user before proceeding
+            console.print(
+                "[yellow]Strict validation is enabled. You can:[/yellow]\n"
+                "  [cyan]c[/cyan] - Continue anyway (might waste API credits)\n"
+                "  [cyan]r[/cyan] - Re-extract from MKV (delete cache and retry)\n"
+                "  [cyan]s[/cyan] - Skip this movie\n"
+            )
+
+            from .core.utils import CACHE_DIR
+
+            while True:
+                choice = input("Your choice [c/r/s]: ").strip().lower()
+                if choice == "s":
+                    console.print("[yellow]Skipping movie[/yellow]")
+                    return None, 0
+                elif choice == "r":
+                    console.print("[blue]Re-extracting subtitle...[/blue]")
+                    # Delete cache if it exists
+                    if srt_path.exists() and CACHE_DIR in srt_path.parents:
+                        srt_path.unlink()
+                        console.print(
+                            f"[yellow]Deleted cache: {srt_path.name}[/yellow]"
+                        )
+                    console.print(
+                        "[yellow]Please re-run the program to re-extract[/yellow]"
+                    )
+                    return None, 0
+                elif choice == "c":
+                    console.print(
+                        "[yellow]Continuing with low entry count (user override)[/yellow]"
+                    )
+                    break
+                else:
+                    console.print("[red]Invalid choice. Enter c, r, or s[/red]")
+        else:
+            # Permissive mode: just warn
+            console.print(
+                "[yellow]Continuing anyway (strict_validation is disabled)[/yellow]"
+            )
+
+    return subs, entry_count
+
+
 def process_movie_phase1(
     movie: Movie,
     client: OpenAI,
+    config: Config,
     analysis_model: str = "gpt-4o",
     dry_run: bool = False,
     skip_analysis: bool = False,
@@ -273,6 +380,9 @@ def process_movie_phase1(
     service_tier: str = "auto",
     total_movies: int = 1,
     current_index: int = 1,
+    min_subtitle_count: int = 50,
+    min_subtitle_file_size: int = 2048,
+    strict_validation: bool = True,
 ) -> bool:
     """
     Phase 1: Extract subtitle, analyze context, display for user review.
@@ -313,31 +423,28 @@ def process_movie_phase1(
         console.print(f"[dim](Original: {original_path})[/dim]")
 
     # Get source language subtitle
-    srt_path, is_temp = get_source_subtitle(movie, source_lang)
+    srt_path, skip_requested = get_source_subtitle(
+        movie,
+        config,
+        source_lang,
+        min_entries=min_subtitle_count,
+        min_file_size=min_subtitle_file_size,
+    )
+
+    if skip_requested:
+        console.print(f"[yellow]Skipped {movie.title}[/yellow]")
+        return False
 
     if not srt_path:
         console.print(f"[red]Could not find {source_lang} subtitle[/red]")
         return False
 
-    try:
-        # Load subtitle file
-        console.print(f"[blue]Loading subtitle: {srt_path}[/blue]")
-        subs = pysrt.open(srt_path, encoding="utf-8")
-    except Exception:
-        try:
-            subs = pysrt.open(srt_path, encoding="latin-1")
-        except Exception as e:
-            console.print(f"[red]Error loading subtitle: {e}[/red]")
-            return False
+    # Load and validate subtitle file
+    subs, entry_count = load_and_validate_subtitle(
+        srt_path, min_subtitle_count, strict_validation
+    )
 
-    console.print(f"[green]Loaded {len(subs)} subtitle entries[/green]")
-
-    # Validate we have subtitle entries
-    if len(subs) == 0:
-        console.print(
-            "[red]Error: No subtitle entries found - file may be in unsupported format[/red]"
-        )
-        console.print("[yellow]Supported format: SRT (.srt files)[/yellow]")
+    if subs is None:
         return False
 
     if extract_only:
@@ -657,6 +764,7 @@ def process_movie_phase1(
 def process_movie_phase2(
     movie: Movie,
     client: OpenAI,
+    config: Config,
     translation_model: str = "gpt-4o-mini",
     batch_size: int = 50,
     dry_run: bool = False,
@@ -669,6 +777,9 @@ def process_movie_phase2(
     service_tier: str = "flex",
     total_movies: int = 1,
     current_index: int = 1,
+    min_subtitle_count: int = 50,
+    min_subtitle_file_size: int = 2048,
+    strict_validation: bool = True,
 ) -> bool:
     """
     Phase 2: Load cached context, translate subtitles, save output.
@@ -720,31 +831,29 @@ def process_movie_phase2(
         return True  # Success - movie already translated
 
     # Get source language subtitle (should be in cache from Phase 1)
-    srt_path, is_temp = get_source_subtitle(movie, source_lang)
+    srt_path, skip_requested = get_source_subtitle(
+        movie,
+        config,
+        source_lang,
+        min_entries=min_subtitle_count,
+        min_file_size=min_subtitle_file_size,
+        skip_interactive=True,  # Skip prompts in Phase 2 - use cached subtitle
+    )
+
+    if skip_requested:
+        console.print(f"[yellow]Skipped {movie.title}[/yellow]")
+        return False
 
     if not srt_path:
         console.print(f"[red]Could not find {source_lang} subtitle[/red]")
         return False
 
-    try:
-        # Load subtitle file
-        console.print(f"[blue]Loading subtitle: {srt_path}[/blue]")
-        subs = pysrt.open(srt_path, encoding="utf-8")
-    except Exception:
-        try:
-            subs = pysrt.open(srt_path, encoding="latin-1")
-        except Exception as e:
-            console.print(f"[red]Error loading subtitle: {e}[/red]")
-            return False
+    # Load and validate subtitle file
+    subs, entry_count = load_and_validate_subtitle(
+        srt_path, min_subtitle_count, strict_validation
+    )
 
-    console.print(f"[green]Loaded {len(subs)} subtitle entries[/green]")
-
-    # Validate we have subtitle entries
-    if len(subs) == 0:
-        console.print(
-            "[red]Error: No subtitle entries found - file may be in unsupported format[/red]"
-        )
-        console.print("[yellow]Supported format: SRT (.srt files)[/yellow]")
+    if subs is None:
         return False
 
     if dry_run:
@@ -937,6 +1046,7 @@ def main():
             if process_movie_phase1(
                 movie,
                 client,
+                config,
                 analysis_model=config.analysis_model,
                 dry_run=config.dry_run,
                 skip_analysis=True,  # Skip analysis in extract-only mode
@@ -949,6 +1059,9 @@ def main():
                 service_tier=config.analysis_service_tier,
                 total_movies=total_selected,
                 current_index=idx,
+                min_subtitle_count=config.min_subtitle_count,
+                min_subtitle_file_size=config.min_subtitle_file_size,
+                strict_validation=config.strict_validation,
             ):
                 extract_count += 1
         console.print(
@@ -965,6 +1078,7 @@ def main():
         if process_movie_phase1(
             movie,
             client,
+            config,
             analysis_model=config.analysis_model,
             dry_run=config.dry_run,
             skip_analysis=config.skip_analysis,
@@ -977,6 +1091,9 @@ def main():
             service_tier=config.analysis_service_tier,
             total_movies=total_movies,
             current_index=idx,
+            min_subtitle_count=config.min_subtitle_count,
+            min_subtitle_file_size=config.min_subtitle_file_size,
+            strict_validation=config.strict_validation,
         ):
             approved_movies.append(movie)
 
@@ -1001,6 +1118,7 @@ def main():
         if process_movie_phase2(
             movie,
             client,
+            config,
             translation_model=config.translation_model,
             batch_size=config.batch_size,
             dry_run=config.dry_run,
@@ -1013,6 +1131,9 @@ def main():
             service_tier=config.translation_service_tier,
             total_movies=total_approved,
             current_index=idx,
+            min_subtitle_count=config.min_subtitle_count,
+            min_subtitle_file_size=config.min_subtitle_file_size,
+            strict_validation=config.strict_validation,
         ):
             success_count += 1
 

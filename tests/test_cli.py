@@ -1,12 +1,12 @@
 """Tests for CLI two-phase workflow."""
 
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 
 def test_extract_only_skips_translation(tmp_path):
     """Should skip translation when extract_only is True."""
     from subtrans.cli import process_movie_phase1
-    from subtrans.core.models import Movie
+    from subtrans.core.models import Movie, Config
 
     # Create a test SRT file
     srt_path = tmp_path / "test.en.srt"
@@ -28,15 +28,26 @@ Test subtitle
         existing_subtitles=[],
     )
 
+    # Create mock config with new fields
+    config = MagicMock(spec=Config)
+    config.interactive_track_selection = False
+    config.auto_select_tracks = True
+
     # Mock the subtitle finding
     with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
-        mock_get_sub.return_value = (srt_path, False)
+        mock_get_sub.return_value = (
+            srt_path,
+            False,
+        )  # (path, skip_requested)
 
         # Call with extract_only=True (uses phase1)
         result = process_movie_phase1(
             movie,
             client=None,  # No client needed for extract-only
+            config=config,
             extract_only=True,
+            strict_validation=False,  # Disable validation prompts for test
+            min_subtitle_count=1,  # Accept test file with 1 entry
         )
 
         # Should succeed without calling OpenAI
@@ -47,7 +58,7 @@ Test subtitle
 def test_extract_only_loads_subtitle(tmp_path):
     """Should load subtitle file in extract-only mode."""
     from subtrans.cli import process_movie_phase1
-    from subtrans.core.models import Movie
+    from subtrans.core.models import Movie, Config
 
     # Create a test SRT file with multiple entries
     srt_path = tmp_path / "test.en.srt"
@@ -72,13 +83,21 @@ Second subtitle
         existing_subtitles=[],
     )
 
+    # Create mock config
+    config = MagicMock(spec=Config)
+    config.interactive_track_selection = False
+    config.auto_select_tracks = True
+
     with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (srt_path, False)
 
         result = process_movie_phase1(
             movie,
             client=None,
+            config=config,
             extract_only=True,
+            strict_validation=False,  # Disable validation prompts for test
+            min_subtitle_count=1,  # Accept test file with 2 entries
         )
 
         # Should successfully process
@@ -88,7 +107,7 @@ Second subtitle
 def test_extract_only_handles_missing_subtitle():
     """Should fail gracefully when subtitle not found in extract-only mode."""
     from subtrans.cli import process_movie_phase1
-    from subtrans.core.models import Movie
+    from subtrans.core.models import Movie, Config
 
     movie = Movie(
         radarr_id=1,
@@ -99,12 +118,21 @@ def test_extract_only_handles_missing_subtitle():
         existing_subtitles=[],
     )
 
+    # Create mock config
+    config = MagicMock(spec=Config)
+    config.interactive_track_selection = False
+    config.auto_select_tracks = True
+
     with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
-        mock_get_sub.return_value = (None, False)  # Subtitle not found
+        mock_get_sub.return_value = (
+            None,
+            False,
+        )  # Subtitle not found, not skipped
 
         result = process_movie_phase1(
             movie,
             client=None,
+            config=config,
             extract_only=True,
         )
 
@@ -127,7 +155,7 @@ def test_show_context_functionality():
 def test_normal_mode_requires_client():
     """Should require OpenAI client when not in extract-only mode."""
     from subtrans.cli import process_movie_phase1
-    from subtrans.core.models import Movie
+    from subtrans.core.models import Movie, Config
 
     movie = Movie(
         radarr_id=1,
@@ -138,6 +166,11 @@ def test_normal_mode_requires_client():
         existing_subtitles=[],
     )
 
+    # Create mock config
+    config = MagicMock(spec=Config)
+    config.interactive_track_selection = False
+    config.auto_select_tracks = True
+
     # Normal mode (extract_only=False) would fail without proper client
     # This is more of a contract test - actual translation requires OpenAI
     # Just verify the parameter exists and defaults to False
@@ -147,6 +180,7 @@ def test_normal_mode_requires_client():
         result = process_movie_phase1(
             movie,
             client=None,
+            config=config,
             extract_only=False,  # Explicitly False
             dry_run=True,  # Use dry_run to avoid needing full setup
         )

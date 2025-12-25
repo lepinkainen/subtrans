@@ -68,3 +68,94 @@ path_mappings: []
 
     config = load_config(config_file)
     assert config.path_mappings == []
+
+
+def test_config_validation_defaults(tmp_path):
+    """Should use default validation settings when section missing."""
+    from subtrans.core.config import load_config
+
+    config_file = tmp_path / "test_config.yml"
+    config_file.write_text("""
+bazarr:
+  url: "http://test:6767"
+  api_key: "test_key"
+openai:
+  analysis_model: "gpt-4o"
+  translation_model: "gpt-4o-mini"
+  batch_size: 50
+translation:
+  skip_analysis: false
+  save_context: true
+  dry_run: false
+path_mappings: []
+""")
+
+    config = load_config(config_file)
+
+    # Verify defaults
+    assert config.min_subtitle_count == 50
+    assert config.min_subtitle_file_size == 2048
+    assert config.strict_validation is True
+
+
+def test_config_validation_custom(tmp_path):
+    """Should load custom validation settings from config."""
+    from subtrans.core.config import load_config
+
+    config_file = tmp_path / "test_config.yml"
+    config_file.write_text("""
+bazarr:
+  url: "http://test:6767"
+  api_key: "test_key"
+openai:
+  analysis_model: "gpt-4o"
+  translation_model: "gpt-4o-mini"
+  batch_size: 50
+translation:
+  skip_analysis: false
+  save_context: true
+  dry_run: false
+path_mappings: []
+validation:
+  min_subtitle_count: 10
+  min_subtitle_file_size: 1024
+  strict_validation: false
+""")
+
+    config = load_config(config_file)
+
+    # Verify custom values
+    assert config.min_subtitle_count == 10
+    assert config.min_subtitle_file_size == 1024
+    assert config.strict_validation is False
+
+
+def test_config_validation_partial(tmp_path):
+    """Should use defaults for missing validation fields."""
+    from subtrans.core.config import load_config
+
+    config_file = tmp_path / "test_config.yml"
+    config_file.write_text("""
+bazarr:
+  url: "http://test:6767"
+  api_key: "test_key"
+openai:
+  analysis_model: "gpt-4o"
+  translation_model: "gpt-4o-mini"
+  batch_size: 50
+translation:
+  skip_analysis: false
+  save_context: true
+  dry_run: false
+path_mappings: []
+validation:
+  min_subtitle_count: 25
+""")
+
+    config = load_config(config_file)
+
+    # Verify custom value for specified field
+    assert config.min_subtitle_count == 25
+    # Verify defaults for unspecified fields
+    assert config.min_subtitle_file_size == 2048
+    assert config.strict_validation is True

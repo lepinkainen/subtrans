@@ -23,6 +23,9 @@ class SubtitleTrack:
     language: str
     name: str
     codec: str
+    forced: bool = False  # Whether this is a forced subtitle track
+    sdh: bool = False  # Whether this is SDH (subtitles for deaf/hard of hearing)
+    entry_count: int = 0  # Number of subtitle entries (from num_index_entries)
 
 
 @dataclass
@@ -48,6 +51,13 @@ class Config:
     # Service tier for OpenAI API pricing: "auto", "flex", "default", "priority"
     analysis_service_tier: str = "auto"  # Standard pricing for Pass 1 (interactive)
     translation_service_tier: str = "flex"  # Flex pricing for Pass 2 (50% discount)
+    # Subtitle validation settings
+    min_subtitle_count: int = 50  # Minimum entries for valid subtitle
+    min_subtitle_file_size: int = 2048  # Minimum file size (2KB)
+    strict_validation: bool = True  # Hard error vs warning on validation failure
+    # Track selection behavior
+    interactive_track_selection: bool = True  # Show track table and prompt user
+    auto_select_tracks: bool = False  # Skip prompts, use automatic selection
 
 
 @dataclass

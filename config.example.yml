@@ -51,3 +51,44 @@ translation:
   min_translation_difference: 0.8  # Minimum difference ratio (0.0-1.0) for validation
   log_token_usage: true     # Log API token usage to file for cost tracking
                             # Token usage log location: ~/.cache/subtrans/token_usage.jsonl
+
+# Subtitle validation - prevents wasted API costs from corrupted files
+# Multi-layer validation catches corrupted cache, incomplete extractions, and truncated files
+validation:
+  min_subtitle_count: 50        # Minimum number of subtitle entries (typical movie: 1000+)
+                                # Catches corrupted cache files with only a few entries
+                                # Set lower for short films/trailers if needed
+
+  min_subtitle_file_size: 2048  # Minimum file size in bytes (2KB)
+                                # Catches truncated or empty subtitle files
+                                # Usually no need to change this
+
+  strict_validation: true       # Prompt user when validation fails vs auto-continue
+                                # true: Ask user before proceeding with suspicious files (recommended)
+                                #       Options: continue, re-extract, or skip
+                                # false: Just warn and continue (not recommended - may waste API credits)
+
+# Validation behavior:
+# - Post-extraction validation: Checks files immediately after mkvextract
+# - Cache validation: Verifies cached files before reuse (auto-repairs corrupted cache)
+# - Pre-analysis validation: Final check before expensive GPT API calls
+# - For short films/trailers where low counts are expected, you can:
+#   * Set strict_validation: false to disable prompts
+#   * Set min_subtitle_count lower (e.g., 10 for very short content)
+#   * Choose "continue anyway" when prompted in strict mode
+
+# Subtitle track selection - control how source subtitle tracks are selected
+# Interactive mode shows all discovered tracks before processing, allowing you to:
+# - Review track metadata (format, forced, SDH, entry count)
+# - Manually override automatic track selection
+# - Skip movies with incorrect or missing tracks
+# - View all available tracks regardless of language
+subtitle_selection:
+  interactive_track_selection: true  # Show track table and prompt user for confirmation
+                                     # true: Display all tracks with metadata and allow manual selection
+                                     # false: Silently use automatic track selection
+
+  auto_select_tracks: false          # Skip all prompts and use automatic selection
+                                     # true: Never show prompts (fully automatic mode)
+                                     # false: Show prompts when interactive_track_selection is true
+                                     # Note: auto_select_tracks overrides interactive_track_selection

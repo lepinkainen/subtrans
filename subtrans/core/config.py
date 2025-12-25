@@ -55,4 +55,18 @@ def load_config(config_path: Path) -> Config:
         ),
         analysis_service_tier=data["openai"].get("analysis_service_tier", "auto"),
         translation_service_tier=data["openai"].get("translation_service_tier", "flex"),
+        log_token_usage=data["translation"].get("log_token_usage", True),
+        # Validation settings with defaults for backward compatibility
+        min_subtitle_count=data.get("validation", {}).get("min_subtitle_count", 50),
+        min_subtitle_file_size=data.get("validation", {}).get(
+            "min_subtitle_file_size", 2048
+        ),
+        strict_validation=data.get("validation", {}).get("strict_validation", True),
+        # Track selection behavior with defaults for backward compatibility
+        interactive_track_selection=data.get("subtitle_selection", {}).get(
+            "interactive_track_selection", True
+        ),
+        auto_select_tracks=data.get("subtitle_selection", {}).get(
+            "auto_select_tracks", False
+        ),
     )

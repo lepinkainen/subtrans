@@ -32,6 +32,10 @@ def test_subtitle_track_dataclass():
     assert track.language == "eng"
     assert track.name == "English"
     assert track.codec == "SubRip/SRT"
+    # New fields should have defaults
+    assert track.forced is False
+    assert track.sdh is False
+    assert track.entry_count == 0
 
 
 def test_config_dataclass():

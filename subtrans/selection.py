@@ -1,7 +1,6 @@
 """Fzf-style movie selection interface using prompt-toolkit."""
 
 import sys
-from typing import Callable
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -28,10 +27,8 @@ class MultiSelectControl(FormattedTextControl):
     def __init__(
         self,
         movies: list[Movie],
-        on_selection_change: Callable[[list[int]], None],
     ):
         self.movies = movies
-        self.on_selection_change = on_selection_change
         self.filtered_indices = list(range(len(movies)))
         self.selected_indices: set[int] = set()
         self.cursor_position = 0
@@ -184,10 +181,7 @@ def create_fzf_interface(movies: list[Movie]) -> list[Movie]:
     selected_movies = []
 
     # Create the controls
-    control = MultiSelectControl(
-        movies,
-        on_selection_change=lambda indices: None,  # We don't need this callback
-    )
+    control = MultiSelectControl(movies)
     header_control = FormattedTextControl(control._get_header_content)
 
     # Create key bindings
