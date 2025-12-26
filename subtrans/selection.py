@@ -1,6 +1,7 @@
 """Fzf-style media selection interface using prompt-toolkit."""
 
 import sys
+from typing import cast
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -376,18 +377,18 @@ def select_movies_fzf(
 
     # Use the fzf interface
     try:
-        selected = create_fzf_interface(movies, "movies")
+        selected = create_fzf_interface(cast(list[MediaType], movies), "movies")
 
         if selected:
             console.print(
                 f"[green]Selected {len(selected)} movies for translation:[/green]"
             )
-            for movie in selected:
+            for movie in cast(list[Movie], selected):
                 console.print(f"  • {movie.title} ({movie.year})")
         else:
             console.print("[yellow]No movies selected.[/yellow]")
 
-        return selected
+        return cast(list[Movie], selected)
     except KeyboardInterrupt:
         console.print("\n[yellow]Selection cancelled.[/yellow]")
         return []
@@ -476,18 +477,18 @@ def select_episodes_fzf(
 
     # Use the fzf interface
     try:
-        selected = create_fzf_interface(episodes, "episodes")
+        selected = create_fzf_interface(cast(list[MediaType], episodes), "episodes")
 
         if selected:
             console.print(
                 f"[green]Selected {len(selected)} episodes for translation:[/green]"
             )
-            for episode in selected:
+            for episode in cast(list[Episode], selected):
                 console.print(f"  • {episode.display_title} - {episode.episode_title}")
         else:
             console.print("[yellow]No episodes selected.[/yellow]")
 
-        return selected
+        return cast(list[Episode], selected)
     except KeyboardInterrupt:
         console.print("\n[yellow]Selection cancelled.[/yellow]")
         return []

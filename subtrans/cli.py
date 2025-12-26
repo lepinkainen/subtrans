@@ -664,7 +664,7 @@ def process_movie_phase1(
     context = None
     if not skip_analysis:
         # Check if we have a cached context first using cache module
-        context = load_cached_context(movie.title, movie.year)
+        context = load_cached_context(movie)
 
         if context is None:
             # No cached context, run analysis
@@ -682,7 +682,7 @@ def process_movie_phase1(
 
             # Optionally save context for review/reuse in cache directory
             if save_context and context.raw_json:
-                save_context_cache(context, movie.title, movie.year)
+                save_context_cache(context, movie)
         else:
             console.print("[blue]Using cached context from previous analysis[/blue]")
 
@@ -727,11 +727,11 @@ def process_movie_phase1(
                 import subprocess
                 import sys
 
-                context_path = get_context_cache_path(movie.title, movie.year)
+                context_path = get_context_cache_path(movie)
 
                 # Ensure the context is saved before editing
                 if not context_path.exists():
-                    save_context_cache(context, movie.title, movie.year)
+                    save_context_cache(context, movie)
 
                 # Get the editor from environment or default
                 editor = os.environ.get(
@@ -745,7 +745,7 @@ def process_movie_phase1(
                     subprocess.run([editor, str(context_path)], check=True)
 
                     # Reload the context after editing
-                    edited_context = load_cached_context(movie.title, movie.year)
+                    edited_context = load_cached_context(movie)
                     if edited_context:
                         context = edited_context
                         console.print("[green]Context reloaded after editing[/green]")
@@ -780,7 +780,7 @@ def process_movie_phase1(
 
             elif response == "d":
                 # Show diff with cached context if it exists
-                cached_context = load_cached_context(movie.title, movie.year)
+                cached_context = load_cached_context(movie)
                 if cached_context and cached_context.raw_json != context.raw_json:
                     console.print(
                         "[blue]Showing differences between current and cached context:[/blue]"
@@ -816,11 +816,11 @@ def process_movie_phase1(
                         import subprocess
                         import sys
 
-                        context_path = get_context_cache_path(movie.title, movie.year)
+                        context_path = get_context_cache_path(movie)
 
                         # Ensure the context is saved before editing
                         if not context_path.exists():
-                            save_context_cache(context, movie.title, movie.year)
+                            save_context_cache(context, movie)
 
                         # Get the editor from environment or default
                         editor = os.environ.get(
@@ -835,9 +835,7 @@ def process_movie_phase1(
                             subprocess.run([editor, str(context_path)], check=True)
 
                             # Reload the context after editing
-                            edited_context = load_cached_context(
-                                movie.title, movie.year
-                            )
+                            edited_context = load_cached_context(movie)
                             if edited_context:
                                 context = edited_context
                                 console.print(
@@ -892,11 +890,11 @@ def process_movie_phase1(
                         import subprocess
                         import sys
 
-                        context_path = get_context_cache_path(movie.title, movie.year)
+                        context_path = get_context_cache_path(movie)
 
                         # Ensure the context is saved before editing
                         if not context_path.exists():
-                            save_context_cache(context, movie.title, movie.year)
+                            save_context_cache(context, movie)
 
                         # Get the editor from environment or default
                         editor = os.environ.get(
@@ -911,9 +909,7 @@ def process_movie_phase1(
                             subprocess.run([editor, str(context_path)], check=True)
 
                             # Reload the context after editing
-                            edited_context = load_cached_context(
-                                movie.title, movie.year
-                            )
+                            edited_context = load_cached_context(movie)
                             if edited_context:
                                 context = edited_context
                                 console.print(
@@ -958,7 +954,7 @@ def process_movie_phase1(
 
             # Context approved, save it if needed
             if save_context and context.raw_json:
-                save_context_cache(context, movie.title, movie.year)
+                save_context_cache(context, movie)
                 console.print("[green]Context saved to cache[/green]")
 
     return True
@@ -1062,7 +1058,7 @@ def process_movie_phase2(
         return True
 
     # Load cached context from Phase 1
-    context = load_cached_context(movie.title, movie.year)
+    context = load_cached_context(movie)
     if context:
         console.print("[blue]Using cached context from Phase 1[/blue]")
     else:
