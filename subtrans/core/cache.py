@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from .models import TranslationContext
-from .media_types import MediaType, is_movie
+from .media_types import MediaType, is_movie, is_episode
 from .utils import CACHE_DIR, console
 
 
@@ -48,7 +48,7 @@ def get_context_cache_path(media: MediaType) -> Path:
         # Replace spaces with underscores
         safe_title = safe_title.replace(" ", "_")
         return CACHE_DIR / f"{safe_title}_context.json"
-    else:  # is_episode
+    elif is_episode(media):
         # For episodes: series_name_S##E##_year_context.json
         safe_series = "".join(
             c for c in media.series_name if c.isalnum() or c in (" ", "_")
@@ -58,6 +58,9 @@ def get_context_cache_path(media: MediaType) -> Path:
             CACHE_DIR
             / f"{safe_series}_S{media.season_number:02d}E{media.episode_number:02d}_{media.series_year}_context.json"
         )
+    else:
+        # Unreachable, but needed for type checking
+        return CACHE_DIR / "unknown_context.json"
 
 
 def load_cached_context(media: MediaType) -> Optional[TranslationContext]:

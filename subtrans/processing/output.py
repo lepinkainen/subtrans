@@ -6,7 +6,7 @@ from pathlib import Path
 import pysrt
 
 from ..core.utils import console, CACHE_DIR
-from ..core.media_types import MediaType, is_movie
+from ..core.media_types import MediaType, is_movie, is_episode
 
 
 def check_translation_exists(
@@ -32,15 +32,8 @@ def check_translation_exists(
     mkv_path = find_mkv_file(media.file_path)
     if mkv_path and mkv_path.exists():
         # Media file exists, check for translation
-        if is_movie(media):
-            filename = f"{mkv_path.stem}.{target_lang}.srt"
-        else:  # is_episode
-            # Episode format: Series.Name.S01E01.fi.srt
-            sanitized_series = re.sub(r"[^\w\s]", "", media.series_name).replace(
-                " ", "."
-            )
-            filename = f"{sanitized_series}.S{media.season_number:02d}E{media.episode_number:02d}.{target_lang}.srt"
-
+        # Use original filename stem for both movies and episodes
+        filename = f"{mkv_path.stem}.{target_lang}.srt"
         primary_path = mkv_path.parent / filename
         if primary_path.exists():
             return True, primary_path
@@ -50,12 +43,15 @@ def check_translation_exists(
     if is_movie(media):
         sanitized_title = re.sub(r"[^\w\s]", "", media.title).replace(" ", "_")
         cache_path = CACHE_DIR / f"{sanitized_title}_{media.year}.{target_lang}.srt"
-    else:  # is_episode
+    elif is_episode(media):
         sanitized_series = re.sub(r"[^\w\s]", "", media.series_name).replace(" ", "_")
         cache_path = (
             CACHE_DIR
             / f"{sanitized_series}_S{media.season_number:02d}E{media.episode_number:02d}.{target_lang}.srt"
         )
+    else:
+        # Unreachable, but needed for type checking
+        return False, None
 
     if cache_path.exists():
         return True, cache_path
@@ -82,46 +78,30 @@ def save_translated_subtitle(
         Path where subtitle was saved
     """
     if mkv_path:
-        # Use MKV filename as base
-        if is_movie(media):
-            filename = f"{mkv_path.stem}.{target_lang}.srt"
-        else:  # is_episode
-            # Episode format: Series.Name.S01E01.fi.srt
-            sanitized_series = re.sub(r"[^\w\s]", "", media.series_name).replace(
-                " ", "."
-            )
-            filename = f"{sanitized_series}.S{media.season_number:02d}E{media.episode_number:02d}.{target_lang}.srt"
+        # Use MKV filename as base - preserve exact original filename
+        filename = f"{mkv_path.stem}.{target_lang}.srt"
         output_path = mkv_path.parent / filename
     else:
         # Use media directory
         media_dir = Path(media.file_path)
         if media_dir.is_file():
-            if is_movie(media):
-                filename = f"{media_dir.stem}.{target_lang}.srt"
-            else:  # is_episode
-                sanitized_series = re.sub(r"[^\w\s]", "", media.series_name).replace(
-                    " ", "."
-                )
-                filename = f"{sanitized_series}.S{media.season_number:02d}E{media.episode_number:02d}.{target_lang}.srt"
+            # Use original filename stem for both movies and episodes
+            filename = f"{media_dir.stem}.{target_lang}.srt"
             output_path = media_dir.parent / filename
         else:
             # Find any video file
             for ext in [".mkv", ".mp4", ".avi"]:
                 videos = list(media_dir.glob(f"*{ext}"))
                 if videos:
-                    if is_movie(media):
-                        filename = f"{videos[0].stem}.{target_lang}.srt"
-                    else:  # is_episode
-                        sanitized_series = re.sub(
-                            r"[^\w\s]", "", media.series_name
-                        ).replace(" ", ".")
-                        filename = f"{sanitized_series}.S{media.season_number:02d}E{media.episode_number:02d}.{target_lang}.srt"
+                    # Use original filename stem for both movies and episodes
+                    filename = f"{videos[0].stem}.{target_lang}.srt"
                     output_path = videos[0].parent / filename
                     break
             else:
+                # No video file found - use generic fallback naming
                 if is_movie(media):
                     output_path = media_dir / f"movie.{target_lang}.srt"
-                else:  # is_episode
+                elif is_episode(media):
                     sanitized_series = re.sub(
                         r"[^\w\s]", "", media.series_name
                     ).replace(" ", ".")
@@ -129,6 +109,9 @@ def save_translated_subtitle(
                         media_dir
                         / f"{sanitized_series}.S{media.season_number:02d}E{media.episode_number:02d}.{target_lang}.srt"
                     )
+                else:
+                    # Unreachable, but needed for type checking
+                    output_path = media_dir / f"unknown.{target_lang}.srt"
 
     # Try to save to the media directory
     try:
@@ -145,7 +128,7 @@ def save_translated_subtitle(
             ).rstrip()
             safe_title = safe_title.replace(" ", "_")
             fallback_path = CACHE_DIR / f"{safe_title}.{target_lang}.srt"
-        else:  # is_episode
+        elif is_episode(media):
             sanitized_series = re.sub(r"[^\w\s]", "", media.series_name).replace(
                 " ", "_"
             )
@@ -153,6 +136,9 @@ def save_translated_subtitle(
                 CACHE_DIR
                 / f"{sanitized_series}_S{media.season_number:02d}E{media.episode_number:02d}.{target_lang}.srt"
             )
+        else:
+            # Unreachable, but needed for type checking
+            fallback_path = CACHE_DIR / f"unknown.{target_lang}.srt"
         translated_subs.save(fallback_path, encoding="utf-8")
         console.print(f"[yellow]Saved to local cache instead: {fallback_path}[/yellow]")
         return fallback_path

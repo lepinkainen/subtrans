@@ -205,7 +205,9 @@ def get_wanted_episodes(
                     missing_subtitles=missing_langs,
                     existing_subtitles=item.get("subtitles", []),
                     series_year=item.get("year", 0),  # Try to get year from wanted API
-                    sonarr_series_id=item.get("sonarrSeriesId", 0),  # Store series ID for API lookups
+                    sonarr_series_id=item.get(
+                        "sonarrSeriesId", 0
+                    ),  # Store series ID for API lookups
                 )
             )
 

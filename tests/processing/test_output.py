@@ -290,18 +290,21 @@ def test_save_translated_subtitle_episode_simple(tmp_path):
     # Save subtitle
     result = save_translated_subtitle(subs, episode, mkv_path=mkv)
 
-    # Check output path uses episode naming format
+    # Check output path preserves exact original filename
     assert result == tmp_path / "Breaking.Bad.S01E01.fi.srt"
     assert result.exists()
 
 
 def test_save_translated_subtitle_episode_with_special_chars(tmp_path):
-    """Should sanitize series name with special characters."""
+    """Should preserve original filename with special characters."""
     from subtrans.processing.output import save_translated_subtitle
     import pysrt
 
-    # Create a dummy MKV file
-    mkv = tmp_path / "episode.mkv"
+    # Create a dummy MKV file with special characters (real-world naming)
+    mkv = (
+        tmp_path
+        / "It's Always Sunny in Philadelphia - S02E05 - Hundred Dollar Baby [HDTV-720p].mkv"
+    )
     mkv.touch()
 
     # Create mock episode with special characters in series name
@@ -329,8 +332,58 @@ def test_save_translated_subtitle_episode_with_special_chars(tmp_path):
     # Save subtitle
     result = save_translated_subtitle(subs, episode, mkv_path=mkv)
 
-    # Check output path sanitizes series name (removes apostrophe)
-    assert result == tmp_path / "Its.Always.Sunny.in.Philadelphia.S02E05.fi.srt"
+    # Check output path preserves exact original filename
+    assert (
+        result
+        == tmp_path
+        / "It's Always Sunny in Philadelphia - S02E05 - Hundred Dollar Baby [HDTV-720p].fi.srt"
+    )
+    assert result.exists()
+
+
+def test_save_translated_subtitle_episode_complex_real_world(tmp_path):
+    """Should preserve complex real-world episode filename exactly."""
+    from subtrans.processing.output import save_translated_subtitle
+    import pysrt
+
+    # Create a dummy MKV file with complex real-world naming
+    mkv = (
+        tmp_path
+        / "Mistletoe Murders (2024) - S02E06 - 'Twas the Fight Before Christmas 2 [WEBDL-1080p][EAC3 2.0]-ForTheMrs.mkv"
+    )
+    mkv.touch()
+
+    # Create mock episode
+    episode = Episode(
+        sonarr_id=1,
+        series_name="Mistletoe Murders",
+        season_number=2,
+        episode_number=6,
+        episode_title="'Twas the Fight Before Christmas 2",
+        path=str(tmp_path),
+        missing_subtitles=["fi"],
+        existing_subtitles=[],
+        series_year=2024,
+    )
+
+    # Create mock subtitle file
+    subs = pysrt.SubRipFile()
+    sub = pysrt.SubRipItem()
+    sub.index = 1
+    sub.start.seconds = 0
+    sub.end.seconds = 1
+    sub.text = "Test"
+    subs.append(sub)
+
+    # Save subtitle
+    result = save_translated_subtitle(subs, episode, mkv_path=mkv)
+
+    # Check output path preserves entire filename structure
+    expected = (
+        tmp_path
+        / "Mistletoe Murders (2024) - S02E06 - 'Twas the Fight Before Christmas 2 [WEBDL-1080p][EAC3 2.0]-ForTheMrs.fi.srt"
+    )
+    assert result == expected
     assert result.exists()
 
 
@@ -392,7 +445,7 @@ def test_check_translation_exists_episode(tmp_path):
     from subtrans.processing.output import check_translation_exists
 
     # Create a dummy MKV file
-    mkv = tmp_path / "episode.mkv"
+    mkv = tmp_path / "Game of Thrones - S01E01 - Winter Is Coming.mkv"
     mkv.touch()
 
     # Create mock episode
@@ -413,8 +466,8 @@ def test_check_translation_exists_episode(tmp_path):
     assert not exists
     assert path is None
 
-    # Create the translation file
-    translation_path = tmp_path / "Game.of.Thrones.S01E01.fi.srt"
+    # Create the translation file with exact filename match
+    translation_path = tmp_path / "Game of Thrones - S01E01 - Winter Is Coming.fi.srt"
     translation_path.touch()
 
     # Now it should be found
