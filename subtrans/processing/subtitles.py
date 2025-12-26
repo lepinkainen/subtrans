@@ -8,47 +8,48 @@ import pysrt
 from rich.table import Table
 
 from ..core.cache import get_subtitle_cache_path
-from ..core.models import Config, Movie, SubtitleTrack
+from ..core.models import Config, SubtitleTrack
+from ..core.media_types import MediaType
 from ..core.utils import console
 
 
-def find_mkv_file(movie_path: str) -> Path | None:
+def find_mkv_file(media_path: str) -> Path | None:
     """
-    Find the MKV file in the movie directory.
+    Find the MKV file for a movie or episode.
 
     Args:
-        movie_path: Path to movie file or directory
+        media_path: Path to media file or directory
 
     Returns:
         Path to MKV file, or None if not found
     """
-    movie_dir = Path(movie_path)
-    if movie_dir.is_file() and movie_dir.suffix.lower() == ".mkv":
-        return movie_dir
+    media_dir = Path(media_path)
+    if media_dir.is_file() and media_dir.suffix.lower() == ".mkv":
+        return media_dir
 
-    if movie_dir.is_dir():
-        mkv_files = list(movie_dir.glob("*.mkv"))
+    if media_dir.is_dir():
+        mkv_files = list(media_dir.glob("*.mkv"))
         if mkv_files:
-            # Return the largest MKV file (likely the main movie)
+            # Return the largest MKV file (likely the main video file)
             return max(mkv_files, key=lambda p: p.stat().st_size)
 
     return None
 
 
-def find_external_srt(movie_path: str | Path, lang: str = "en") -> Path | None:
+def find_external_srt(media_path: str | Path, lang: str = "en") -> Path | None:
     """
-    Find external SRT file for the movie.
+    Find external SRT file for a movie or episode.
 
     Args:
-        movie_path: Path to movie file or directory
+        media_path: Path to media file or directory
         lang: Language code to search for (default: "en")
 
     Returns:
-        Path to SRT file, or None if found
+        Path to SRT file, or None if not found
     """
-    movie_dir = Path(movie_path)
-    if movie_dir.is_file():
-        movie_dir = movie_dir.parent
+    media_dir = Path(media_path)
+    if media_dir.is_file():
+        media_dir = media_dir.parent
 
     # Look for subtitle patterns with language code first
     lang_patterns = [
@@ -67,13 +68,13 @@ def find_external_srt(movie_path: str | Path, lang: str = "en") -> Path | None:
 
     # Check language-specific patterns first
     for pattern in lang_patterns:
-        matches = list(movie_dir.glob(pattern))
+        matches = list(media_dir.glob(pattern))
         if matches:
             return matches[0]
 
     # Only use fallback pattern if no language-specific file exists
     # This returns None if there are only non-English files
-    all_srts = list(movie_dir.glob("*.srt"))
+    all_srts = list(media_dir.glob("*.srt"))
     if all_srts:
         # If there are SRT files but none match the language, return None
         # to trigger checking for embedded subtitles
@@ -502,7 +503,7 @@ def prompt_track_selection(
 
 
 def get_source_subtitle(
-    movie: Movie,
+    media: MediaType,
     config: Config,
     source_lang: str = "en",
     min_entries: int = 50,
@@ -510,14 +511,14 @@ def get_source_subtitle(
     skip_interactive: bool = False,
 ) -> tuple[Path | None, bool]:
     """
-    Get source language subtitle for a movie.
+    Get source language subtitle for a movie or episode.
 
     Searches for subtitles in this order:
     1. External SRT file
     2. Embedded MKV subtitle (cached if extracted)
 
     Args:
-        movie: Movie object with path information
+        media: Movie or Episode object with path information
         config: Configuration object for interactive track selection
         source_lang: Source language code (ISO 639-1/2)
         min_entries: Minimum subtitle entries for validation
@@ -528,7 +529,7 @@ def get_source_subtitle(
         Tuple of (path_to_srt, skip_requested)
     """
     # First, check for external SRT
-    external_srt = find_external_srt(movie.path, source_lang)
+    external_srt = find_external_srt(media.file_path, source_lang)
     if external_srt and external_srt.exists():
         # Display external SRT info if interactive mode is enabled
         if (
@@ -570,7 +571,7 @@ def get_source_subtitle(
             return external_srt, False
 
     # Check for embedded subtitles in MKV
-    mkv_path = find_mkv_file(movie.path)
+    mkv_path = find_mkv_file(media.file_path)
     if not mkv_path:
         console.print("[yellow]No MKV file found[/yellow]")
         return None, False

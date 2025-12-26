@@ -159,3 +159,55 @@ validation:
     # Verify defaults for unspecified fields
     assert config.min_subtitle_file_size == 2048
     assert config.strict_validation is True
+
+
+def test_load_config_with_api_key(tmp_path):
+    """Should load OpenAI API key from config."""
+    from subtrans.core.config import load_config
+
+    config_file = tmp_path / "test_config.yml"
+    config_file.write_text("""
+bazarr:
+  url: "http://test:6767"
+  api_key: "test_key"
+openai:
+  api_key: "sk-test-api-key-123"
+  analysis_model: "gpt-4o"
+  translation_model: "gpt-4o-mini"
+  batch_size: 50
+translation:
+  skip_analysis: false
+  save_context: true
+  dry_run: false
+path_mappings: []
+""")
+
+    config = load_config(config_file)
+    assert config.openai_api_key == "sk-test-api-key-123"
+
+
+def test_load_config_api_key_from_env(tmp_path, monkeypatch):
+    """Should fall back to environment variable when api_key not in config."""
+    from subtrans.core.config import load_config
+
+    # Set environment variable
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-env-api-key-456")
+
+    config_file = tmp_path / "test_config.yml"
+    config_file.write_text("""
+bazarr:
+  url: "http://test:6767"
+  api_key: "test_key"
+openai:
+  analysis_model: "gpt-4o"
+  translation_model: "gpt-4o-mini"
+  batch_size: 50
+translation:
+  skip_analysis: false
+  save_context: true
+  dry_run: false
+path_mappings: []
+""")
+
+    config = load_config(config_file)
+    assert config.openai_api_key == "sk-env-api-key-456"

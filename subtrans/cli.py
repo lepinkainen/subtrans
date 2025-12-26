@@ -1,10 +1,12 @@
 """CLI entry point for subtrans application."""
 
 import argparse
+import fnmatch
 import os
 import sys
 import time
 from pathlib import Path
+from typing import cast
 
 import pysrt
 from openai import OpenAI
@@ -18,20 +20,22 @@ from rich.progress import (
 from rich.table import Table
 
 from .core.config import load_config
-from .core.models import Config, Movie
+from .core.models import Config, Movie, Episode
 from .core.utils import console
 from .core.cache import load_cached_context, save_context_cache, get_context_cache_path
 from .core.token_logger import get_detailed_token_stats, get_pricing_age_info
 from .integrations.bazarr import (
     get_wanted_movies,
     populate_movie_path,
+    get_wanted_episodes,
+    populate_episode_path,
     apply_path_mapping,
 )
 from .processing.subtitles import get_source_subtitle, find_mkv_file
 from .processing.translator import analyze_subtitles, translate_subtitles_batch
 from .processing.output import check_translation_exists
 from .processing.output import save_translated_subtitle
-from .selection import select_movies_fzf
+from .selection import select_movies_fzf, select_episodes_fzf
 
 
 def display_token_stats(movie_filter: str | None = None) -> None:
@@ -256,6 +260,205 @@ def select_movies_interactive(
     if legacy:
         return select_movies_legacy(movies, target_lang)
     return select_movies_fzf(movies, target_lang, force_fzf=force_fzf)
+
+
+def select_episodes_legacy(
+    episodes: list[Episode], target_lang: str = "fi"
+) -> list[Episode]:
+    """
+    Legacy episode selection using numbered list.
+
+    Args:
+        episodes: List of available episodes
+        target_lang: Target language code for display
+
+    Returns:
+        List of selected episodes
+    """
+    if not episodes:
+        console.print(
+            f"[yellow]No episodes missing {target_lang} subtitles found.[/yellow]"
+        )
+        return []
+
+    # Display episodes in a table
+    table = Table(title=f"Episodes Missing {target_lang.upper()} Subtitles")
+    table.add_column("№", style="cyan", width=6)
+    table.add_column("Series", style="green")
+    table.add_column("Episode", style="yellow")
+    table.add_column("Title", style="blue")
+    table.add_column("Missing", style="red")
+
+    for i, episode in enumerate(episodes, 1):
+        table.add_row(
+            str(i),
+            episode.series_name,
+            f"S{episode.season_number:02d}E{episode.episode_number:02d}",
+            episode.episode_title,
+            ", ".join(episode.missing_subtitles),
+        )
+
+    console.print(table)
+    console.print()
+
+    # Get user input
+    while True:
+        try:
+            console.print(
+                "[yellow]Enter episode numbers (comma-separated), 'all', or 'q' to quit:[/yellow]"
+            )
+            response = input("> ").strip().lower()
+
+            if response == "q":
+                return []
+
+            if response == "all":
+                return episodes
+
+            # Parse comma-separated numbers
+            selected_indices = []
+            for num_str in response.split(","):
+                num_str = num_str.strip()
+                if num_str.isdigit():
+                    idx = int(num_str) - 1
+                    if 0 <= idx < len(episodes):
+                        selected_indices.append(idx)
+                    else:
+                        console.print(
+                            f"[red]Invalid number: {num_str} (out of range)[/red]"
+                        )
+                        selected_indices = []
+                        break
+                else:
+                    console.print(f"[red]Invalid input: {num_str}[/red]")
+                    selected_indices = []
+                    break
+
+            if selected_indices:
+                return [episodes[i] for i in selected_indices]
+
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[yellow]Selection cancelled.[/yellow]")
+            return []
+
+
+def select_episodes_interactive(
+    episodes: list[Episode],
+    target_lang: str = "fi",
+    legacy: bool = False,
+    force_fzf: bool = False,
+) -> list[Episode]:
+    """
+    Interactive episode selection using fzf-style or legacy interface.
+
+    Args:
+        episodes: List of available episodes
+        target_lang: Target language code for display
+        legacy: Whether to use the legacy numbered interface
+        force_fzf: Force fzf-style interface even if terminal detection fails
+
+    Returns:
+        List of selected episodes
+    """
+    if legacy:
+        return select_episodes_legacy(episodes, target_lang)
+    return select_episodes_fzf(episodes, target_lang, force_fzf=force_fzf)
+
+
+def select_by_pattern(
+    media_items: list[Movie] | list[Episode],
+    pattern: str,
+    target_lang: str,
+    media_type: str,
+) -> list[Movie] | list[Episode]:
+    """
+    Select media items matching a glob pattern (non-interactive).
+
+    Args:
+        media_items: List of movies or episodes to filter
+        pattern: Glob pattern (case-insensitive)
+        target_lang: Target language code for display
+        media_type: "movies" or "episodes" for display purposes
+
+    Returns:
+        List of matching media items
+
+    Raises:
+        SystemExit: If no matches found (fail fast)
+    """
+    pattern_lower = pattern.lower()
+    matches = []
+
+    for item in media_items:
+        # Build search strings based on media type
+        search_strings = []
+
+        if isinstance(item, Movie):
+            # For movies: check title, display_title, and combined display
+            search_strings.append(item.title.lower())
+            search_strings.append(item.display_title.lower())
+            search_strings.append(
+                f"{item.display_title} - {item.display_subtitle}".lower()
+            )
+        elif isinstance(item, Episode):
+            # For episodes: check series_name, episode_title, display_title, and combined display
+            search_strings.append(item.series_name.lower())
+            if item.episode_title:
+                search_strings.append(item.episode_title.lower())
+            search_strings.append(item.display_title.lower())
+            search_strings.append(
+                f"{item.display_title} - {item.display_subtitle}".lower()
+            )
+
+        # Check if pattern matches any of the search strings
+        if any(fnmatch.fnmatch(s, pattern_lower) for s in search_strings):
+            matches.append(item)
+
+    # If no matches, exit with error
+    if not matches:
+        console.print(f"[red]Error: No {media_type} matching pattern '{pattern}'[/red]")
+        console.print(
+            f"[dim]Searched {len(media_items)} {media_type} but found no matches.[/dim]"
+        )
+        sys.exit(1)
+
+    # Display matched items in a table
+    if media_type == "movies":
+        table = Table(title=f"Selected {len(matches)} Movies Matching '{pattern}'")
+        table.add_column("Title", style="green")
+        table.add_column("Year", style="yellow")
+        table.add_column("Missing", style="red")
+
+        for item in matches:
+            if isinstance(item, Movie):
+                table.add_row(
+                    item.title,
+                    str(item.year),
+                    ", ".join(item.missing_subtitles),
+                )
+    else:  # Episodes
+        table = Table(title=f"Selected {len(matches)} Episodes Matching '{pattern}'")
+        table.add_column("Series", style="green")
+        table.add_column("Episode", style="yellow")
+        table.add_column("Title", style="blue")
+        table.add_column("Missing", style="red")
+
+        for item in matches:
+            if isinstance(item, Episode):
+                table.add_row(
+                    item.series_name,
+                    f"S{item.season_number:02d}E{item.episode_number:02d}",
+                    item.episode_title,
+                    ", ".join(item.missing_subtitles),
+                )
+
+    console.print(table)
+    console.print(
+        f"[green]Pattern matched {len(matches)}/{len(media_items)} {media_type}[/green]"
+    )
+
+    # Type assertion: matches will be the same type as media_items
+    return cast(list[Movie] | list[Episode], matches)
 
 
 def load_and_validate_subtitle(
@@ -821,9 +1024,7 @@ def process_movie_phase2(
         console.print(f"[dim](Original: {original_path})[/dim]")
 
     # Check if translation already exists
-    exists, existing_path = check_translation_exists(
-        movie.path, movie.title, movie.year, target_lang=target_lang
-    )
+    exists, existing_path = check_translation_exists(movie, target_lang=target_lang)
 
     if exists:
         console.print(f"[yellow]Translation already exists: {existing_path}[/yellow]")
@@ -890,10 +1091,548 @@ def process_movie_phase2(
     mkv_path = find_mkv_file(movie.path)
     output_path = save_translated_subtitle(
         translated,
-        movie.path,
+        movie,
         mkv_path,
-        movie.title,
-        movie.year,
+        target_lang=target_lang,
+    )
+    console.print(
+        f"[bold green]Saved {target_lang} subtitles: {output_path}[/bold green]"
+    )
+
+    # Note: No cleanup needed - cached subtitles are kept for reuse
+
+    return True
+
+
+def process_episode_phase1(
+    episode: Episode,
+    client: OpenAI,
+    config: Config,
+    analysis_model: str = "gpt-4o",
+    dry_run: bool = False,
+    skip_analysis: bool = False,
+    save_context: bool = True,
+    path_mappings: list[tuple[str, str]] | None = None,
+    extract_only: bool = False,
+    source_lang: str = "en",
+    target_lang: str = "fi",
+    log_token_usage: bool = True,
+    service_tier: str = "auto",
+    total_episodes: int = 1,
+    current_index: int = 1,
+    min_subtitle_count: int = 50,
+    min_subtitle_file_size: int = 2048,
+    strict_validation: bool = True,
+) -> bool:
+    """
+    Phase 1: Extract subtitle, analyze context, display for user review.
+
+    Args:
+        episode: Episode to process
+        client: OpenAI client
+        config: Config object for interactive selection settings
+        analysis_model: OpenAI model for context analysis
+        dry_run: If True, skip context analysis (for testing)
+        skip_analysis: Skip context analysis pass
+        save_context: Save analysis context to cache
+        path_mappings: Path mappings for NAS to local translation
+        extract_only: If True, extract and cache subtitles only (no analysis)
+        source_lang: Source language code (ISO 639-1/2)
+        target_lang: Target language code (ISO 639-1/2)
+        log_token_usage: Log API token usage for cost tracking
+        service_tier: OpenAI API service tier ("auto", "flex", "default", "priority")
+        total_episodes: Total number of episodes being processed
+        current_index: Current episode number (1-indexed)
+        min_subtitle_count: Minimum entries for valid subtitle
+        min_subtitle_file_size: Minimum file size for valid subtitle
+        strict_validation: Hard error vs warning on validation failure
+
+    Returns:
+        True if user approved (or extract_only), False if cancelled/error
+    """
+    console.print(f"\n[bold blue]{'=' * 60}[/bold blue]")
+    progress_indicator = (
+        f" ({current_index}/{total_episodes})" if total_episodes > 1 else ""
+    )
+    console.print(
+        f"[bold blue]Processing: {episode.display_title}{progress_indicator}[/bold blue]"
+    )
+    console.print(f"[dim]{episode.display_subtitle}[/dim]")
+
+    # Apply path mapping
+    original_path = episode.path
+    if path_mappings:
+        episode.path = apply_path_mapping(episode.path, path_mappings)
+
+    console.print(f"Path: {episode.path}")
+    if episode.path != original_path:
+        console.print(f"[dim](Original: {original_path})[/dim]")
+
+    # Get source language subtitle
+    srt_path, skip_requested = get_source_subtitle(
+        episode,
+        config,
+        source_lang,
+        min_entries=min_subtitle_count,
+        min_file_size=min_subtitle_file_size,
+    )
+
+    if skip_requested:
+        console.print(f"[yellow]Skipped {episode.display_title}[/yellow]")
+        return False
+
+    if not srt_path:
+        console.print(f"[red]Could not find {source_lang} subtitle[/red]")
+        return False
+
+    # Load and validate subtitle file
+    subs, entry_count = load_and_validate_subtitle(
+        srt_path, min_subtitle_count, strict_validation
+    )
+
+    if subs is None:
+        return False
+
+    if extract_only:
+        console.print(
+            "[yellow]Extract-only mode - subtitle cached successfully[/yellow]"
+        )
+        return True
+
+    if dry_run:
+        console.print("[yellow]Dry run - skipping analysis[/yellow]")
+        return True
+
+    # Pass 1: Analyze for context (unless skipped)
+    context = None
+    if not skip_analysis:
+        # Check if we have a cached context first using cache module
+        context = load_cached_context(episode)
+
+        if context is None:
+            # No cached context, run analysis
+            context = analyze_subtitles(
+                subs,
+                client,
+                episode.display_title,
+                model=analysis_model,
+                source_lang=source_lang,
+                target_lang=target_lang,
+                movie_year=episode.series_year,
+                log_token_usage=log_token_usage,
+                service_tier=service_tier,
+            )
+
+            # Optionally save context for review/reuse in cache directory
+            if save_context and context.raw_json:
+                save_context_cache(context, episode)
+        else:
+            console.print("[blue]Using cached context from previous analysis[/blue]")
+
+            # Auto-accept cached contexts when batch processing
+            if total_episodes > 1:
+                console.print(
+                    "[green]Auto-accepting cached context (batch mode)[/green]"
+                )
+                return True  # Auto-approved
+
+        # Show context and wait for user approval (single episode OR fresh context)
+        if context and context.raw_json:
+            from rich.json import JSON
+            from rich.panel import Panel
+
+            console.print(
+                "\n[bold blue]Translation Context (Pass 1 Analysis):[/bold blue]"
+            )
+
+            # Create a pretty JSON display
+            json_content = JSON.from_data(context.raw_json, indent=2)
+            panel = Panel(
+                json_content,
+                title=f"Context for {episode.display_title}",
+                title_align="left",
+                border_style="blue",
+            )
+            console.print(panel)
+
+            # Wait for user confirmation
+            console.print(
+                "\n[yellow]Approve this context for translation? [Y/n/e/d][/yellow]"
+            )
+            console.print(
+                "[dim]Y=yes, n=no, e=edit context JSON, d=diff with cached[/dim]"
+            )
+            response = input("> ").strip().lower()
+
+            if response == "e":
+                # Edit the context JSON file
+                import subprocess
+
+                context_path = get_context_cache_path(episode)
+
+                # Ensure the context is saved before editing
+                if not context_path.exists():
+                    save_context_cache(context, episode)
+
+                # Get the editor from environment or default
+                editor = os.environ.get(
+                    "EDITOR", "nano" if sys.platform != "win32" else "notepad"
+                )
+
+                try:
+                    console.print(
+                        f"[blue]Opening {context_path} with {editor}...[/blue]"
+                    )
+                    subprocess.run([editor, str(context_path)], check=True)
+
+                    # Reload the context after editing
+                    edited_context = load_cached_context(episode)
+                    if edited_context:
+                        context = edited_context
+                        console.print("[green]Context reloaded after editing[/green]")
+
+                        # Show the edited context
+                        json_content = JSON.from_data(context.raw_json, indent=2)
+                        panel = Panel(
+                            json_content,
+                            title=f"Edited Context for {episode.display_title}",
+                            title_align="left",
+                            border_style="green",
+                        )
+                        console.print(panel)
+
+                        # Ask again what to do
+                        console.print(
+                            "\n[yellow]Approve edited context for translation? [Y/n][/yellow]"
+                        )
+                        response = input("> ").strip().lower()
+                    else:
+                        console.print(
+                            "[red]Failed to reload edited context, using original[/red]"
+                        )
+                except subprocess.CalledProcessError:
+                    console.print(f"[red]Failed to open editor '{editor}'[/red]")
+                except FileNotFoundError:
+                    console.print(
+                        f"[red]Editor '{editor}' not found. Please set EDITOR environment variable.[/red]"
+                    )
+                except Exception as e:
+                    console.print(f"[red]Error editing context: {e}[/red]")
+
+            elif response == "d":
+                # Show diff with cached context if it exists
+                cached_context = load_cached_context(episode)
+                if cached_context and cached_context.raw_json != context.raw_json:
+                    console.print(
+                        "[blue]Showing differences between current and cached context:[/blue]"
+                    )
+                    # Simple diff display
+                    from rich.columns import Columns
+
+                    cached_panel = Panel(
+                        JSON.from_data(cached_context.raw_json, indent=2),
+                        title="Cached Context",
+                        border_style="red",
+                    )
+
+                    current_panel = Panel(
+                        JSON.from_data(context.raw_json, indent=2),
+                        title="Current Context",
+                        border_style="green",
+                    )
+
+                    console.print(Columns([cached_panel, current_panel], equal=True))
+
+                    # Ask again what to do
+                    console.print(
+                        "\n[yellow]Approve this context for translation? [Y/n/e][/yellow]"
+                    )
+                    console.print("[dim]Y=yes, n=no, e=edit current context[/dim]")
+                    response = input("> ").strip().lower()
+
+                    # Process the response again (but only handle 'e' here to avoid recursion)
+                    if response == "e":
+                        # Edit the context JSON file
+                        import subprocess
+
+                        context_path = get_context_cache_path(episode)
+
+                        # Ensure the context is saved before editing
+                        if not context_path.exists():
+                            save_context_cache(context, episode)
+
+                        # Get the editor from environment or default
+                        editor = os.environ.get(
+                            "EDITOR",
+                            "nano" if sys.platform != "win32" else "notepad",
+                        )
+
+                        try:
+                            console.print(
+                                f"[blue]Opening {context_path} with {editor}...[/blue]"
+                            )
+                            subprocess.run([editor, str(context_path)], check=True)
+
+                            # Reload the context after editing
+                            edited_context = load_cached_context(episode)
+                            if edited_context:
+                                context = edited_context
+                                console.print(
+                                    "[green]Context reloaded after editing[/green]"
+                                )
+
+                                # Show the edited context
+                                json_content = JSON.from_data(
+                                    context.raw_json, indent=2
+                                )
+                                panel = Panel(
+                                    json_content,
+                                    title=f"Edited Context for {episode.display_title}",
+                                    title_align="left",
+                                    border_style="green",
+                                )
+                                console.print(panel)
+
+                                # Ask again what to do
+                                console.print(
+                                    "\n[yellow]Approve edited context for translation? [Y/n][/yellow]"
+                                )
+                                response = input("> ").strip().lower()
+                            else:
+                                console.print(
+                                    "[red]Failed to reload edited context, using original[/red]"
+                                )
+                        except subprocess.CalledProcessError:
+                            console.print(
+                                f"[red]Failed to open editor '{editor}'[/red]"
+                            )
+                        except FileNotFoundError:
+                            console.print(
+                                f"[red]Editor '{editor}' not found. Please set EDITOR environment variable.[/red]"
+                            )
+                        except Exception as e:
+                            console.print(f"[red]Error editing context: {e}[/red]")
+                else:
+                    console.print(
+                        "[yellow]No differences found or no cached context available[/yellow]"
+                    )
+                    # Ask again what to do
+                    console.print(
+                        "\n[yellow]Approve this context for translation? [Y/n/e][/yellow]"
+                    )
+                    console.print("[dim]Y=yes, n=no, e=edit current context[/dim]")
+                    response = input("> ").strip().lower()
+
+                    if response == "e":
+                        # Edit the context JSON file
+                        import subprocess
+
+                        context_path = get_context_cache_path(episode)
+
+                        # Ensure the context is saved before editing
+                        if not context_path.exists():
+                            save_context_cache(context, episode)
+
+                        # Get the editor from environment or default
+                        editor = os.environ.get(
+                            "EDITOR",
+                            "nano" if sys.platform != "win32" else "notepad",
+                        )
+
+                        try:
+                            console.print(
+                                f"[blue]Opening {context_path} with {editor}...[/blue]"
+                            )
+                            subprocess.run([editor, str(context_path)], check=True)
+
+                            # Reload the context after editing
+                            edited_context = load_cached_context(episode)
+                            if edited_context:
+                                context = edited_context
+                                console.print(
+                                    "[green]Context reloaded after editing[/green]"
+                                )
+
+                                # Show the edited context
+                                json_content = JSON.from_data(
+                                    context.raw_json, indent=2
+                                )
+                                panel = Panel(
+                                    json_content,
+                                    title=f"Edited Context for {episode.display_title}",
+                                    title_align="left",
+                                    border_style="green",
+                                )
+                                console.print(panel)
+
+                                # Ask again what to do
+                                console.print(
+                                    "\n[yellow]Approve edited context for translation? [Y/n][/yellow]"
+                                )
+                                response = input("> ").strip().lower()
+                            else:
+                                console.print(
+                                    "[red]Failed to reload edited context, using original[/red]"
+                                )
+                        except subprocess.CalledProcessError:
+                            console.print(
+                                f"[red]Failed to open editor '{editor}'[/red]"
+                            )
+                        except FileNotFoundError:
+                            console.print(
+                                f"[red]Editor '{editor}' not found. Please set EDITOR environment variable.[/red]"
+                            )
+                        except Exception as e:
+                            console.print(f"[red]Error editing context: {e}[/red]")
+
+            if response and response not in ["y", "yes", ""]:
+                console.print(
+                    "[yellow]Context not approved - episode skipped.[/yellow]"
+                )
+                return False
+
+            # Context approved, save it if needed
+            if save_context and context.raw_json:
+                save_context_cache(context, episode)
+                console.print("[green]Context saved to cache[/green]")
+
+    return True
+
+
+def process_episode_phase2(
+    episode: Episode,
+    client: OpenAI,
+    config: Config,
+    translation_model: str = "gpt-4o-mini",
+    batch_size: int = 50,
+    dry_run: bool = False,
+    path_mappings: list[tuple[str, str]] | None = None,
+    source_lang: str = "en",
+    target_lang: str = "fi",
+    validate_translation: bool = True,
+    min_translation_difference: float = 0.8,
+    log_token_usage: bool = True,
+    service_tier: str = "flex",
+    total_episodes: int = 1,
+    current_index: int = 1,
+    min_subtitle_count: int = 50,
+    min_subtitle_file_size: int = 2048,
+    strict_validation: bool = True,
+) -> bool:
+    """
+    Phase 2: Load cached context, translate subtitles, save output.
+
+    Args:
+        episode: Episode to process
+        client: OpenAI client
+        config: Config object for interactive selection settings
+        translation_model: OpenAI model for translation
+        batch_size: Number of subtitles per API call
+        dry_run: If True, skip translation (for testing)
+        path_mappings: Path mappings for NAS to local translation
+        source_lang: Source language code (ISO 639-1/2)
+        target_lang: Target language code (ISO 639-1/2)
+        validate_translation: Whether to validate translation quality
+        min_translation_difference: Minimum difference ratio (0.0-1.0)
+        log_token_usage: Log API token usage for cost tracking
+        service_tier: OpenAI API service tier ("auto", "flex", "default", "priority")
+        total_episodes: Total number of episodes being processed
+        current_index: Current episode number (1-indexed)
+        min_subtitle_count: Minimum entries for valid subtitle
+        min_subtitle_file_size: Minimum file size for valid subtitle
+        strict_validation: Hard error vs warning on validation failure
+
+    Returns:
+        True if translation succeeded, False otherwise
+    """
+    console.print(f"\n[bold blue]{'=' * 60}[/bold blue]")
+    progress_indicator = (
+        f" ({current_index}/{total_episodes})" if total_episodes > 1 else ""
+    )
+    console.print(
+        f"[bold blue]Translating: {episode.display_title}{progress_indicator}[/bold blue]"
+    )
+    console.print(f"[dim]{episode.display_subtitle}[/dim]")
+
+    # Apply path mapping
+    original_path = episode.path
+    if path_mappings:
+        episode.path = apply_path_mapping(episode.path, path_mappings)
+
+    console.print(f"Path: {episode.path}")
+    if episode.path != original_path:
+        console.print(f"[dim](Original: {original_path})[/dim]")
+
+    # Check if translation already exists
+    exists, existing_path = check_translation_exists(episode, target_lang=target_lang)
+
+    if exists:
+        console.print(f"[yellow]Translation already exists: {existing_path}[/yellow]")
+        console.print("[yellow]Skipping re-translation[/yellow]")
+        return True  # Success - episode already translated
+
+    # Get source language subtitle (should be in cache from Phase 1)
+    srt_path, skip_requested = get_source_subtitle(
+        episode,
+        config,
+        source_lang,
+        min_entries=min_subtitle_count,
+        min_file_size=min_subtitle_file_size,
+        skip_interactive=True,  # Skip prompts in Phase 2 - use cached subtitle
+    )
+
+    if skip_requested:
+        console.print(f"[yellow]Skipped {episode.display_title}[/yellow]")
+        return False
+
+    if not srt_path:
+        console.print(f"[red]Could not find {source_lang} subtitle[/red]")
+        return False
+
+    # Load and validate subtitle file
+    subs, entry_count = load_and_validate_subtitle(
+        srt_path, min_subtitle_count, strict_validation
+    )
+
+    if subs is None:
+        return False
+
+    if dry_run:
+        console.print("[yellow]Dry run - skipping translation[/yellow]")
+        return True
+
+    # Load cached context from Phase 1
+    context = load_cached_context(episode)
+    if context:
+        console.print("[blue]Using cached context from Phase 1[/blue]")
+    else:
+        console.print(
+            "[yellow]Warning: No cached context found, translating without context[/yellow]"
+        )
+
+    # Pass 2: Translate with context
+    translated = translate_subtitles_batch(
+        subs,
+        client,
+        episode.display_title,
+        context=context,
+        batch_size=batch_size,
+        model=translation_model,
+        source_lang=source_lang,
+        target_lang=target_lang,
+        validate_translation=validate_translation,
+        min_translation_difference=min_translation_difference,
+        movie_year=episode.series_year,
+        log_token_usage=log_token_usage,
+        service_tier=service_tier,
+    )
+
+    # Save translated subtitles
+    mkv_path = find_mkv_file(episode.path)
+    output_path = save_translated_subtitle(
+        translated,
+        episode,
+        mkv_path,
         target_lang=target_lang,
     )
     console.print(
@@ -945,6 +1684,17 @@ def main():
         type=str,
         help="Filter statistics by movie title (use with --stats)",
     )
+    parser.add_argument(
+        "--series",
+        action="store_true",
+        help="Enable episode mode (translate TV episodes instead of movies)",
+    )
+    parser.add_argument(
+        "--select",
+        type=str,
+        metavar="PATTERN",
+        help="Select items matching glob pattern (non-interactive, case-insensitive)",
+    )
 
     args = parser.parse_args()
 
@@ -952,6 +1702,13 @@ def main():
     if args.stats:
         display_token_stats(args.movie)
         return
+
+    # Validate mutually exclusive flags
+    if args.select and (args.legacy_selection or args.force_fzf):
+        console.print(
+            "[yellow]Warning: --legacy-selection and --force-fzf "
+            "are ignored when using --select[/yellow]"
+        )
 
     # Load configuration
     config = load_config(args.config)
@@ -980,68 +1737,245 @@ def main():
         for from_path, to_path in config.path_mappings:
             console.print(f"  {from_path} -> {to_path}")
 
-    # Get OpenAI API key from environment (not needed for extract-only mode)
-    api_key = os.environ.get("OPENAI_API_KEY")
+    # Get OpenAI API key from config (not needed for extract-only mode)
+    api_key = config.openai_api_key
 
     if not api_key and not config.dry_run and not args.extract_only:
-        console.print("[red]OPENAI_API_KEY environment variable not set[/red]")
+        console.print("[red]OpenAI API key not found[/red]")
+        console.print(
+            "[yellow]Set it in config.yml (openai.api_key) or OPENAI_API_KEY environment variable[/yellow]"
+        )
         sys.exit(1)
 
     client = OpenAI(api_key=api_key) if api_key else None
 
-    # Fetch wanted movies
-    console.print(
-        f"[blue]Fetching movies missing {config.target_language} subtitles from Bazarr...[/blue]"
-    )
-    movies = get_wanted_movies(
-        config.bazarr_url,
-        config.bazarr_api_key,
-        source_lang=config.source_language,
-        target_lang=config.target_language,
-    )
-
-    if not movies:
+    # Choose workflow based on --series flag
+    if args.series:
+        # Episode workflow
         console.print(
-            f"[yellow]No movies found missing {config.target_language} subtitles.[/yellow]"
+            f"[blue]Fetching episodes missing {config.target_language} subtitles from Bazarr...[/blue]"
         )
-        sys.exit(0)
-
-    console.print(
-        f"[green]Found {len(movies)} movies missing {config.target_language} subtitles[/green]"
-    )
-
-    # Select movies
-    selected = select_movies_interactive(
-        movies,
-        config.target_language,
-        legacy=args.legacy_selection,
-        force_fzf=args.force_fzf,
-    )
-
-    if not selected:
-        console.print("[yellow]No movies selected.[/yellow]")
-        sys.exit(0)
-
-    # Fetch full details (including paths) for selected movies only
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task(
-            f"[blue]Fetching paths for {len(selected)} movies...", total=len(selected)
+        episodes = get_wanted_episodes(
+            config.bazarr_url,
+            config.bazarr_api_key,
+            source_lang=config.source_language,
+            target_lang=config.target_language,
         )
-        for movie in selected:
-            populate_movie_path(movie, config.bazarr_url, config.bazarr_api_key)
-            progress.advance(task)
+
+        if not episodes:
+            console.print(
+                f"[yellow]No episodes found missing {config.target_language} subtitles.[/yellow]"
+            )
+            sys.exit(0)
+
+        console.print(
+            f"[green]Found {len(episodes)} episodes missing {config.target_language} subtitles[/green]"
+        )
+
+        # Note about data quality
+        s00_count = sum(1 for ep in episodes if ep.season_number == 0)
+        if s00_count > 0:
+            console.print(
+                f"[yellow]Warning: {s00_count} episodes show as S00E00 (may indicate Bazarr data sync issues)[/yellow]"
+            )
+
+        # Select episodes
+        if args.select:
+            selected = select_by_pattern(
+                episodes, args.select, config.target_language, "episodes"
+            )
+        else:
+            selected = select_episodes_interactive(
+                episodes,
+                config.target_language,
+                legacy=args.legacy_selection,
+                force_fzf=args.force_fzf,
+            )
+
+        if not selected:
+            console.print("[yellow]No episodes selected.[/yellow]")
+            sys.exit(0)
+
+        # Fetch full details (including paths) for selected episodes only if not already present
+        episodes_needing_paths = [ep for ep in selected if not ep.path]
+        if episodes_needing_paths:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task(
+                    f"[blue]Fetching paths for {len(episodes_needing_paths)} episodes...",
+                    total=len(episodes_needing_paths),
+                )
+                for episode in episodes_needing_paths:
+                    populate_episode_path(
+                        episode, config.bazarr_url, config.bazarr_api_key
+                    )
+                    progress.advance(task)
+        else:
+            console.print("[dim]All episodes already have paths from wanted API[/dim]")
+    else:
+        # Movie workflow
+        console.print(
+            f"[blue]Fetching movies missing {config.target_language} subtitles from Bazarr...[/blue]"
+        )
+        movies = get_wanted_movies(
+            config.bazarr_url,
+            config.bazarr_api_key,
+            source_lang=config.source_language,
+            target_lang=config.target_language,
+        )
+
+        if not movies:
+            console.print(
+                f"[yellow]No movies found missing {config.target_language} subtitles.[/yellow]"
+            )
+            sys.exit(0)
+
+        console.print(
+            f"[green]Found {len(movies)} movies missing {config.target_language} subtitles[/green]"
+        )
+
+        # Select movies
+        if args.select:
+            selected = select_by_pattern(
+                movies, args.select, config.target_language, "movies"
+            )
+        else:
+            selected = select_movies_interactive(
+                movies,
+                config.target_language,
+                legacy=args.legacy_selection,
+                force_fzf=args.force_fzf,
+            )
+
+        if not selected:
+            console.print("[yellow]No movies selected.[/yellow]")
+            sys.exit(0)
+
+        # Fetch full details (including paths) for selected movies only
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task(
+                f"[blue]Fetching paths for {len(selected)} movies...",
+                total=len(selected),
+            )
+            for movie in selected:
+                populate_movie_path(movie, config.bazarr_url, config.bazarr_api_key)
+                progress.advance(task)
 
     # Handle extract-only mode separately (no translation phase)
     if args.extract_only:
         console.print("\n[bold blue]Extract-Only Mode: Caching Subtitles[/bold blue]")
         extract_count = 0
         total_selected = len(selected)
+
+        if args.series:
+            # Episode extract-only mode
+            for idx, episode in enumerate(selected, start=1):
+                if process_episode_phase1(
+                    episode,
+                    client,
+                    config,
+                    analysis_model=config.analysis_model,
+                    dry_run=config.dry_run,
+                    skip_analysis=True,
+                    save_context=False,
+                    path_mappings=config.path_mappings
+                    if config.path_mappings
+                    else None,
+                    extract_only=True,
+                    source_lang=config.source_language,
+                    target_lang=config.target_language,
+                    log_token_usage=config.log_token_usage,
+                    service_tier=config.analysis_service_tier,
+                    total_episodes=total_selected,
+                    current_index=idx,
+                    min_subtitle_count=config.min_subtitle_count,
+                    min_subtitle_file_size=config.min_subtitle_file_size,
+                    strict_validation=config.strict_validation,
+                ):
+                    extract_count += 1
+        else:
+            # Movie extract-only mode
+            for idx, movie in enumerate(selected, start=1):
+                if process_movie_phase1(
+                    movie,
+                    client,
+                    config,
+                    analysis_model=config.analysis_model,
+                    dry_run=config.dry_run,
+                    skip_analysis=True,
+                    save_context=False,
+                    path_mappings=config.path_mappings
+                    if config.path_mappings
+                    else None,
+                    extract_only=True,
+                    source_lang=config.source_language,
+                    target_lang=config.target_language,
+                    log_token_usage=config.log_token_usage,
+                    service_tier=config.analysis_service_tier,
+                    total_movies=total_selected,
+                    current_index=idx,
+                    min_subtitle_count=config.min_subtitle_count,
+                    min_subtitle_file_size=config.min_subtitle_file_size,
+                    strict_validation=config.strict_validation,
+                ):
+                    extract_count += 1
+
+        console.print(
+            f"\n[bold]Completed: {extract_count}/{len(selected)} subtitles cached[/bold]"
+        )
+        sys.exit(0)
+
+    # Phase 1: Context Analysis
+    console.print("\n[bold blue]Phase 1: Context Analysis[/bold blue]")
+    approved_items = []
+    total_items = len(selected)
+
+    if args.series:
+        # Episode Phase 1
+        for idx, episode in enumerate(selected, start=1):
+            if process_episode_phase1(
+                episode,
+                client,
+                config,
+                analysis_model=config.analysis_model,
+                dry_run=config.dry_run,
+                skip_analysis=config.skip_analysis,
+                save_context=config.save_context,
+                path_mappings=config.path_mappings if config.path_mappings else None,
+                extract_only=False,
+                source_lang=config.source_language,
+                target_lang=config.target_language,
+                log_token_usage=config.log_token_usage,
+                service_tier=config.analysis_service_tier,
+                total_episodes=total_items,
+                current_index=idx,
+                min_subtitle_count=config.min_subtitle_count,
+                min_subtitle_file_size=config.min_subtitle_file_size,
+                strict_validation=config.strict_validation,
+            ):
+                approved_items.append(episode)
+
+        # Exit if no episodes approved
+        if not approved_items:
+            console.print("[yellow]No episodes approved for translation.[/yellow]")
+            sys.exit(0)
+
+        console.print(
+            f"\n[green]{len(approved_items)}/{len(selected)} episodes approved for translation[/green]"
+        )
+    else:
+        # Movie Phase 1
         for idx, movie in enumerate(selected, start=1):
             if process_movie_phase1(
                 movie,
@@ -1049,93 +1983,91 @@ def main():
                 config,
                 analysis_model=config.analysis_model,
                 dry_run=config.dry_run,
-                skip_analysis=True,  # Skip analysis in extract-only mode
-                save_context=False,
+                skip_analysis=config.skip_analysis,
+                save_context=config.save_context,
                 path_mappings=config.path_mappings if config.path_mappings else None,
-                extract_only=True,
+                extract_only=False,
                 source_lang=config.source_language,
                 target_lang=config.target_language,
                 log_token_usage=config.log_token_usage,
                 service_tier=config.analysis_service_tier,
-                total_movies=total_selected,
+                total_movies=total_items,
                 current_index=idx,
                 min_subtitle_count=config.min_subtitle_count,
                 min_subtitle_file_size=config.min_subtitle_file_size,
                 strict_validation=config.strict_validation,
             ):
-                extract_count += 1
+                approved_items.append(movie)
+
+        # Exit if no movies approved
+        if not approved_items:
+            console.print("[yellow]No movies approved for translation.[/yellow]")
+            sys.exit(0)
+
         console.print(
-            f"\n[bold]Completed: {extract_count}/{len(selected)} subtitles cached[/bold]"
+            f"\n[green]{len(approved_items)}/{len(selected)} movies approved for translation[/green]"
         )
-        sys.exit(0)
 
-    # Phase 1: Context Analysis for ALL movies
-    console.print("\n[bold blue]Phase 1: Context Analysis[/bold blue]")
-    approved_movies = []
-    total_movies = len(selected)
-
-    for idx, movie in enumerate(selected, start=1):
-        if process_movie_phase1(
-            movie,
-            client,
-            config,
-            analysis_model=config.analysis_model,
-            dry_run=config.dry_run,
-            skip_analysis=config.skip_analysis,
-            save_context=config.save_context,
-            path_mappings=config.path_mappings if config.path_mappings else None,
-            extract_only=False,
-            source_lang=config.source_language,
-            target_lang=config.target_language,
-            log_token_usage=config.log_token_usage,
-            service_tier=config.analysis_service_tier,
-            total_movies=total_movies,
-            current_index=idx,
-            min_subtitle_count=config.min_subtitle_count,
-            min_subtitle_file_size=config.min_subtitle_file_size,
-            strict_validation=config.strict_validation,
-        ):
-            approved_movies.append(movie)
-
-    # Exit if no movies approved
-    if not approved_movies:
-        console.print("[yellow]No movies approved for translation.[/yellow]")
-        sys.exit(0)
-
-    console.print(
-        f"\n[green]{len(approved_movies)}/{len(selected)} movies approved for translation[/green]"
-    )
-
-    # Phase 2: Translation for approved movies
+    # Phase 2: Translation
     console.print("\n[bold blue]Phase 2: Translation[/bold blue]")
     success_count = 0
-    total_approved = len(approved_movies)
+    total_approved = len(approved_items)
 
     # Start timing Phase 2
     phase2_start = time.time()
 
-    for idx, movie in enumerate(approved_movies, start=1):
-        if process_movie_phase2(
-            movie,
-            client,
-            config,
-            translation_model=config.translation_model,
-            batch_size=config.batch_size,
-            dry_run=config.dry_run,
-            path_mappings=config.path_mappings if config.path_mappings else None,
-            source_lang=config.source_language,
-            target_lang=config.target_language,
-            validate_translation=config.validate_translation,
-            min_translation_difference=config.min_translation_difference,
-            log_token_usage=config.log_token_usage,
-            service_tier=config.translation_service_tier,
-            total_movies=total_approved,
-            current_index=idx,
-            min_subtitle_count=config.min_subtitle_count,
-            min_subtitle_file_size=config.min_subtitle_file_size,
-            strict_validation=config.strict_validation,
-        ):
-            success_count += 1
+    if args.series:
+        # Episode Phase 2
+        for idx, episode in enumerate(approved_items, start=1):
+            if process_episode_phase2(
+                episode,
+                client,
+                config,
+                translation_model=config.translation_model,
+                batch_size=config.batch_size,
+                dry_run=config.dry_run,
+                path_mappings=config.path_mappings if config.path_mappings else None,
+                source_lang=config.source_language,
+                target_lang=config.target_language,
+                validate_translation=config.validate_translation,
+                min_translation_difference=config.min_translation_difference,
+                log_token_usage=config.log_token_usage,
+                service_tier=config.translation_service_tier,
+                total_episodes=total_approved,
+                current_index=idx,
+                min_subtitle_count=config.min_subtitle_count,
+                min_subtitle_file_size=config.min_subtitle_file_size,
+                strict_validation=config.strict_validation,
+            ):
+                success_count += 1
+
+        media_type = "episodes"
+    else:
+        # Movie Phase 2
+        for idx, movie in enumerate(approved_items, start=1):
+            if process_movie_phase2(
+                movie,
+                client,
+                config,
+                translation_model=config.translation_model,
+                batch_size=config.batch_size,
+                dry_run=config.dry_run,
+                path_mappings=config.path_mappings if config.path_mappings else None,
+                source_lang=config.source_language,
+                target_lang=config.target_language,
+                validate_translation=config.validate_translation,
+                min_translation_difference=config.min_translation_difference,
+                log_token_usage=config.log_token_usage,
+                service_tier=config.translation_service_tier,
+                total_movies=total_approved,
+                current_index=idx,
+                min_subtitle_count=config.min_subtitle_count,
+                min_subtitle_file_size=config.min_subtitle_file_size,
+                strict_validation=config.strict_validation,
+            ):
+                success_count += 1
+
+        media_type = "movies"
 
     # Calculate elapsed time
     phase2_elapsed = time.time() - phase2_start
@@ -1145,7 +2077,7 @@ def main():
     elapsed_str = f"{hours}:{minutes:02d}:{seconds:02d}"
 
     console.print(
-        f"\n[bold]Completed: {success_count}/{len(approved_movies)} movies translated (elapsed: {elapsed_str})[/bold]"
+        f"\n[bold]Completed: {success_count}/{len(approved_items)} {media_type} translated (elapsed: {elapsed_str})[/bold]"
     )
 
 

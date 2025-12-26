@@ -45,6 +45,7 @@ def test_config_dataclass():
     config = Config(
         bazarr_url="http://test:6767",
         bazarr_api_key="test_key",
+        openai_api_key="sk-test-123",
         analysis_model="gpt-4o",
         translation_model="gpt-4o-mini",
         batch_size=50,

@@ -1,5 +1,6 @@
 """Configuration loading and management."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -37,9 +38,15 @@ def load_config(config_path: Path) -> Config:
     for mapping in data.get("path_mappings", []):
         path_mappings.append((mapping["from"], mapping["to"]))
 
+    # Strip trailing slashes from URL to avoid double slashes in API calls
+    bazarr_url = data["bazarr"]["url"].rstrip("/")
+
     return Config(
-        bazarr_url=data["bazarr"]["url"],
+        bazarr_url=bazarr_url,
         bazarr_api_key=data["bazarr"]["api_key"],
+        openai_api_key=data["openai"].get(
+            "api_key", os.environ.get("OPENAI_API_KEY", "")
+        ),
         analysis_model=data["openai"]["analysis_model"],
         translation_model=data["openai"]["translation_model"],
         batch_size=data["openai"]["batch_size"],

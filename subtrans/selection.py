@@ -1,4 +1,4 @@
-"""Fzf-style movie selection interface using prompt-toolkit."""
+"""Fzf-style media selection interface using prompt-toolkit."""
 
 import sys
 
@@ -12,7 +12,8 @@ from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.styles import Style
 from rich.table import Table
 
-from .core.models import Movie
+from .core.models import Movie, Episode
+from .core.media_types import MediaType
 from .core.utils import console
 
 
@@ -26,19 +27,21 @@ class MultiSelectControl(FormattedTextControl):
 
     def __init__(
         self,
-        movies: list[Movie],
+        media_items: list[MediaType],
+        media_type_label: str = "movies",
     ):
-        self.movies = movies
-        self.filtered_indices = list(range(len(movies)))
+        self.media_items = media_items
+        self.media_type_label = media_type_label  # "movies" or "episodes"
+        self.filtered_indices = list(range(len(media_items)))
         self.selected_indices: set[int] = set()
         self.cursor_position = 0
         self.search_text = ""
 
-        # Pre-compute formatted movie strings for faster filtering
-        self.movie_strings = []
-        for movie in movies:
-            movie_str = f"{movie.title} ({movie.year}) - Missing: {', '.join(movie.missing_subtitles)}"
-            self.movie_strings.append(movie_str.lower())
+        # Pre-compute formatted media strings for faster filtering
+        self.media_strings = []
+        for item in media_items:
+            item_str = f"{item.display_title} - {item.display_subtitle}"
+            self.media_strings.append(item_str.lower())
 
         # Initialize with callable that generates content dynamically
         super().__init__(self._get_formatted_content)
@@ -63,8 +66,8 @@ class MultiSelectControl(FormattedTextControl):
         # Summary line
         selected_count = len(self.selected_indices)
         visible_count = len(self.filtered_indices)
-        total_count = len(self.movies)
-        summary = f"Showing {visible_count}/{total_count} movies"
+        total_count = len(self.media_items)
+        summary = f"Showing {visible_count}/{total_count} {self.media_type_label}"
         if selected_count > 0:
             summary += f" | {selected_count} selected"
         content.append(("class:summary", summary))
@@ -75,16 +78,16 @@ class MultiSelectControl(FormattedTextControl):
         return FormattedText(content)
 
     def _get_formatted_content(self) -> FormattedText:
-        """Get the formatted text for movie list."""
+        """Get the formatted text for media list."""
         content = []
 
-        # Movies
+        # Media items
         if not self.filtered_indices:
-            content.append(("class:no-matches", "No matching movies"))
+            content.append(("class:no-matches", f"No matching {self.media_type_label}"))
         else:
-            for idx, movie_idx in enumerate(self.filtered_indices):
-                movie = self.movies[movie_idx]
-                is_selected = movie_idx in self.selected_indices
+            for idx, item_idx in enumerate(self.filtered_indices):
+                item = self.media_items[item_idx]
+                is_selected = item_idx in self.selected_indices
                 is_cursor = idx == self.cursor_position
 
                 # Selection indicator
@@ -100,23 +103,23 @@ class MultiSelectControl(FormattedTextControl):
                 else:
                     style = "class:normal"
 
-                # Movie info
-                line = f"{prefix}{movie.title} ({movie.year}) - Missing: {', '.join(movie.missing_subtitles)}"
+                # Media item info
+                line = f"{prefix}{item.display_title} - {item.display_subtitle}"
                 content.append((style, line))
                 content.append(("", "\n"))
 
         return FormattedText(content)
 
-    def _filter_movies(self) -> None:
-        """Filter movies based on search text."""
+    def _filter_media(self) -> None:
+        """Filter media items based on search text."""
         if not self.search_text.strip():
-            self.filtered_indices = list(range(len(self.movies)))
+            self.filtered_indices = list(range(len(self.media_items)))
         else:
             search_terms = self.search_text.lower().split()
             self.filtered_indices = []
 
-            for i, movie_str in enumerate(self.movie_strings):
-                if all(term in movie_str for term in search_terms):
+            for i, item_str in enumerate(self.media_strings):
+                if all(term in item_str for term in search_terms):
                     self.filtered_indices.append(i)
 
         # Adjust cursor position if needed
@@ -126,14 +129,14 @@ class MultiSelectControl(FormattedTextControl):
     def toggle_selection(self) -> None:
         """Toggle selection for current cursor position."""
         if self.filtered_indices:
-            movie_idx = self.filtered_indices[self.cursor_position]
-            if movie_idx in self.selected_indices:
-                self.selected_indices.remove(movie_idx)
+            item_idx = self.filtered_indices[self.cursor_position]
+            if item_idx in self.selected_indices:
+                self.selected_indices.remove(item_idx)
             else:
-                self.selected_indices.add(movie_idx)
+                self.selected_indices.add(item_idx)
 
     def select_all_visible(self) -> None:
-        """Select all visible movies."""
+        """Select all visible media items."""
         self.selected_indices.update(self.filtered_indices)
 
     def move_cursor(self, direction: int) -> None:
@@ -148,40 +151,43 @@ class MultiSelectControl(FormattedTextControl):
     def add_search_text(self, text: str) -> None:
         """Add text to search query."""
         self.search_text += text
-        self._filter_movies()
+        self._filter_media()
 
     def remove_search_char(self) -> None:
         """Remove last character from search query."""
         self.search_text = self.search_text[:-1]
-        self._filter_movies()
+        self._filter_media()
 
     def clear_search(self) -> None:
         """Clear search query."""
         self.search_text = ""
-        self._filter_movies()
+        self._filter_media()
 
-    def get_selected_movies(self) -> list[Movie]:
-        """Get list of selected movies."""
-        return [self.movies[i] for i in sorted(self.selected_indices)]
+    def get_selected_media(self) -> list[MediaType]:
+        """Get list of selected media items."""
+        return [self.media_items[i] for i in sorted(self.selected_indices)]
 
 
-def create_fzf_interface(movies: list[Movie]) -> list[Movie]:
+def create_fzf_interface(
+    media_items: list[MediaType], media_type_label: str = "movies"
+) -> list[MediaType]:
     """
-    Create an fzf-style interface for selecting movies.
+    Create an fzf-style interface for selecting media items.
 
     Args:
-        movies: List of available movies
+        media_items: List of available media items (movies or episodes)
+        media_type_label: Label for the media type ("movies" or "episodes")
 
     Returns:
-        List of selected movies
+        List of selected media items
     """
-    if not movies:
+    if not media_items:
         return []
 
-    selected_movies = []
+    selected_items = []
 
     # Create the controls
-    control = MultiSelectControl(movies)
+    control = MultiSelectControl(media_items, media_type_label)
     header_control = FormattedTextControl(control._get_header_content)
 
     # Create key bindings
@@ -224,12 +230,12 @@ def create_fzf_interface(movies: list[Movie]) -> list[Movie]:
 
     @kb.add("enter")
     def _(event):
-        nonlocal selected_movies
+        nonlocal selected_items
         # If nothing is selected, select the current cursor item (fzf behavior)
         if not control.selected_indices and control.filtered_indices:
-            movie_idx = control.filtered_indices[control.cursor_position]
-            control.selected_indices.add(movie_idx)
-        selected_movies = control.get_selected_movies()
+            item_idx = control.filtered_indices[control.cursor_position]
+            control.selected_indices.add(item_idx)
+        selected_items = control.get_selected_media()
         event.app.exit()
 
     @kb.add("c-c")
@@ -303,7 +309,7 @@ def create_fzf_interface(movies: list[Movie]) -> list[Movie]:
     # Run the application
     application.run()
 
-    return selected_movies
+    return selected_items
 
 
 def select_movies_fzf(
@@ -370,7 +376,7 @@ def select_movies_fzf(
 
     # Use the fzf interface
     try:
-        selected = create_fzf_interface(movies)
+        selected = create_fzf_interface(movies, "movies")
 
         if selected:
             console.print(
@@ -402,3 +408,103 @@ def select_movies_fzf(
         from .cli import select_movies_legacy
 
         return select_movies_legacy(movies, target_lang)
+
+
+def select_episodes_fzf(
+    episodes: list[Episode], target_lang: str = "fi", force_fzf: bool = False
+) -> list[Episode]:
+    """
+    Select episodes using an fzf-style interface.
+
+    Args:
+        episodes: List of available episodes
+        target_lang: Target language code for display
+        force_fzf: Force fzf interface even if terminal detection fails
+
+    Returns:
+        List of selected episodes
+    """
+    if not episodes:
+        console.print(
+            f"[yellow]No episodes missing {target_lang} subtitles found.[/yellow]"
+        )
+        return []
+
+    # Check if we're in an interactive terminal
+    if not is_interactive_terminal() and not force_fzf:
+        console.print(
+            "[yellow]Warning: Not running in an interactive terminal[/yellow]"
+        )
+        console.print(
+            f"[dim]stdin isatty: {sys.stdin.isatty()}, stdout isatty: {sys.stdout.isatty()}[/dim]"
+        )
+        console.print("[yellow]Falling back to standard selection...[/yellow]")
+        console.print(
+            "[dim]Tip: Use --force-fzf flag to try fzf interface anyway[/dim]"
+        )
+        from .cli import select_episodes_legacy
+
+        return select_episodes_legacy(episodes, target_lang)
+
+    # Show rich table first with episode count
+    table = Table(
+        title=f"Episodes Missing {target_lang.upper()} Subtitles ({len(episodes)} total)"
+    )
+    table.add_column("Count", style="cyan", width=6)
+    table.add_column("Series", style="green")
+    table.add_column("Episode", style="yellow")
+    table.add_column("Title", style="blue")
+    table.add_column("Missing", style="red")
+
+    for i, episode in enumerate(episodes[:10], 1):  # Show first 10 as preview
+        table.add_row(
+            str(i) if i <= 10 else "...",
+            episode.series_name,
+            f"S{episode.season_number:02d}E{episode.episode_number:02d}",
+            episode.episode_title,
+            ", ".join(episode.missing_subtitles),
+        )
+
+    if len(episodes) > 10:
+        table.add_row("", "...", "", f"and {len(episodes) - 10} more", "")
+
+    console.print(table)
+    console.print()
+    console.print("[blue]Starting fzf-style selection interface...[/blue]")
+    console.print("[dim]Press Ctrl+C or q to exit the interface[/dim]")
+    console.print()
+
+    # Use the fzf interface
+    try:
+        selected = create_fzf_interface(episodes, "episodes")
+
+        if selected:
+            console.print(
+                f"[green]Selected {len(selected)} episodes for translation:[/green]"
+            )
+            for episode in selected:
+                console.print(f"  • {episode.display_title} - {episode.episode_title}")
+        else:
+            console.print("[yellow]No episodes selected.[/yellow]")
+
+        return selected
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Selection cancelled.[/yellow]")
+        return []
+    except OSError as e:
+        console.print(f"[red]Terminal error: {e}[/red]")
+        console.print(
+            "[yellow]This may happen if running in a non-standard terminal[/yellow]"
+        )
+        console.print("[yellow]Falling back to standard selection...[/yellow]")
+        from .cli import select_episodes_legacy
+
+        return select_episodes_legacy(episodes, target_lang)
+    except Exception as e:
+        console.print(f"[red]Unexpected error in selection interface: {e}[/red]")
+        # Fall back to the original interface
+        console.print("[yellow]Falling back to standard selection...[/yellow]")
+        # Import here to avoid circular dependency
+        from .cli import select_episodes_legacy
+
+        return select_episodes_legacy(episodes, target_lang)

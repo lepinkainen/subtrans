@@ -1,6 +1,35 @@
 """Data models for subtrans application."""
 
 from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
+
+
+@runtime_checkable
+class MediaItem(Protocol):
+    """Protocol defining shared interface for all media types (movies, episodes)."""
+
+    @property
+    def display_title(self) -> str:
+        """Human-readable title for display (e.g., 'Matrix (1999)' or 'Breaking Bad S01E05')."""
+        ...
+
+    @property
+    def display_subtitle(self) -> str:
+        """Secondary info for display (e.g., 'Pilot - Missing: fi')."""
+        ...
+
+    @property
+    def file_path(self) -> str:
+        """Path to media file."""
+        ...
+
+    @property
+    def cache_key(self) -> tuple[str, ...]:
+        """Unique tuple for cache lookups."""
+        ...
+
+    missing_subtitles: list[str]
+    existing_subtitles: list[dict]
 
 
 @dataclass
@@ -13,6 +42,67 @@ class Movie:
     path: str
     missing_subtitles: list[str]
     existing_subtitles: list[dict]
+
+    @property
+    def display_title(self) -> str:
+        """Human-readable title for display."""
+        return f"{self.title} ({self.year})"
+
+    @property
+    def display_subtitle(self) -> str:
+        """Secondary info showing missing subtitles."""
+        return f"Missing: {', '.join(self.missing_subtitles)}"
+
+    @property
+    def file_path(self) -> str:
+        """Path to movie file."""
+        return self.path
+
+    @property
+    def cache_key(self) -> tuple[str, int]:
+        """Unique cache key based on title and year."""
+        return (self.title, self.year)
+
+
+@dataclass
+class Episode:
+    """Represents a TV episode with subtitle metadata."""
+
+    sonarr_id: int
+    series_name: str
+    season_number: int
+    episode_number: int
+    episode_title: str
+    path: str
+    missing_subtitles: list[str]
+    existing_subtitles: list[dict]
+    series_year: int = 0  # Year series started (for cache key)
+    sonarr_series_id: int = 0  # Series ID for API lookups
+
+    @property
+    def display_title(self) -> str:
+        """Human-readable title for display."""
+        return f"{self.series_name} S{self.season_number:02d}E{self.episode_number:02d}"
+
+    @property
+    def display_subtitle(self) -> str:
+        """Secondary info showing episode title and missing subtitles."""
+        return f"{self.episode_title} - Missing: {', '.join(self.missing_subtitles)}"
+
+    @property
+    def file_path(self) -> str:
+        """Path to episode file."""
+        return self.path
+
+    @property
+    def cache_key(self) -> tuple[str, int, int]:
+        """Unique cache key based on series, season, and episode."""
+        return (self.series_name, self.season_number, self.episode_number)
+
+    @property
+    def series_cache_key(self) -> tuple[str, int]:
+        """Cache key for series-wide context (shared across all episodes)."""
+        return (self.series_name, self.series_year)
 
 
 @dataclass
@@ -34,6 +124,7 @@ class Config:
 
     bazarr_url: str
     bazarr_api_key: str
+    openai_api_key: str  # OpenAI API key
     analysis_model: str  # Model for Pass 1: Context analysis
     translation_model: str  # Model for Pass 2: Translation
     batch_size: int

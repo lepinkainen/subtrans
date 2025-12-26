@@ -177,3 +177,172 @@ def test_apply_path_mapping_empty_list():
 
     result = apply_path_mapping("/test/path.mkv", [])
     assert result == "/test/path.mkv"
+
+
+def test_get_wanted_episodes_includes_all_missing_target(monkeypatch):
+    """Episodes missing target subtitles should be included regardless of source."""
+    from subtrans.integrations.bazarr import get_wanted_episodes
+
+    # Note: Bazarr's wanted API returns episode_number as "SxE" format string (e.g., "1x1")
+    mock_data = {
+        "data": [
+            {
+                "seriesTitle": "Show Name",
+                "episode_number": "1x1",  # Bazarr format: SxE
+                "episodeTitle": "Pilot",
+                "sonarrEpisodeId": 101,
+                "sonarrSeriesId": 10,
+                "missing_subtitles": [{"code2": "fi"}],
+                "subtitles": [{"code2": "en", "code3": "eng"}],
+            },
+            {
+                "seriesTitle": "Another Show",
+                "episode_number": "2x5",  # Bazarr format: SxE
+                "episodeTitle": "Episode Five",
+                "sonarrEpisodeId": 205,
+                "sonarrSeriesId": 20,
+                "missing_subtitles": [{"code2": "fi"}],
+                "subtitles": [{"code2": "fr"}],
+            },
+        ]
+    }
+
+    class MockResponse:
+        def json(self):
+            return mock_data
+
+        def raise_for_status(self):
+            pass
+
+    class MockClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, *args, **kwargs):
+            return MockResponse()
+
+    monkeypatch.setattr("httpx.Client", lambda **kwargs: MockClient())
+
+    result = get_wanted_episodes(
+        "http://test", "key", source_lang="en", target_lang="fi"
+    )
+
+    # Both episodes should be included
+    assert len(result) == 2
+    assert result[0].series_name == "Show Name"
+    assert result[0].season_number == 1
+    assert result[0].episode_number == 1
+    assert result[0].episode_title == "Pilot"
+    assert result[0].sonarr_id == 101
+    assert result[0].sonarr_series_id == 10
+    assert result[1].series_name == "Another Show"
+    assert result[1].season_number == 2
+    assert result[1].episode_number == 5
+    assert result[1].sonarr_series_id == 20
+
+
+def test_populate_episode_path_success(monkeypatch):
+    """Should populate episode path from API."""
+    from subtrans.core.models import Episode
+    from subtrans.integrations.bazarr import populate_episode_path
+
+    episode = Episode(
+        sonarr_id=101,
+        series_name="Test Show",
+        season_number=0,  # Will be updated from API
+        episode_number=0,  # Will be updated from API
+        episode_title="Pilot",
+        path="",
+        missing_subtitles=["fi"],
+        existing_subtitles=[],
+        series_year=0,
+        sonarr_series_id=10,  # Required for API lookup
+    )
+
+    # Mock data matching actual Bazarr /api/episodes response structure
+    mock_data = {
+        "data": [
+            {
+                "sonarrEpisodeId": 101,
+                "path": "/tv/Test.Show/Season.01/S01E01.mkv",
+                "season": 1,
+                "episode": 1,
+            }
+        ]
+    }
+
+    class MockResponse:
+        def json(self):
+            return mock_data
+
+        def raise_for_status(self):
+            pass
+
+    class MockClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, *args, **kwargs):
+            return MockResponse()
+
+    monkeypatch.setattr("httpx.Client", lambda **kwargs: MockClient())
+
+    result = populate_episode_path(episode, "http://test", "key")
+
+    assert result is True
+    assert episode.path == "/tv/Test.Show/Season.01/S01E01.mkv"
+    # Season/episode numbers should be updated from API response
+    assert episode.season_number == 1
+    assert episode.episode_number == 1
+
+
+def test_populate_episode_path_not_found(monkeypatch, capsys):
+    """Should handle episode not found gracefully."""
+    from subtrans.core.models import Episode
+    from subtrans.integrations.bazarr import populate_episode_path
+
+    episode = Episode(
+        sonarr_id=999,
+        series_name="Missing Show",
+        season_number=1,
+        episode_number=1,
+        episode_title="Missing",
+        path="",
+        missing_subtitles=["fi"],
+        existing_subtitles=[],
+        series_year=0,
+        sonarr_series_id=10,  # Required for API lookup
+    )
+
+    mock_data = {"data": []}
+
+    class MockResponse:
+        def json(self):
+            return mock_data
+
+        def raise_for_status(self):
+            pass
+
+    class MockClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, *args, **kwargs):
+            return MockResponse()
+
+    monkeypatch.setattr("httpx.Client", lambda **kwargs: MockClient())
+
+    result = populate_episode_path(episode, "http://test", "key")
+
+    # Changed: Now returns True even when path isn't found (not a fatal error)
+    assert result is True
+    assert episode.path == ""

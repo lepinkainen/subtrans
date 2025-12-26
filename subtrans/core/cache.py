@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from .models import TranslationContext
+from .media_types import MediaType, is_movie
 from .utils import CACHE_DIR, console
 
 
@@ -26,44 +27,50 @@ def get_subtitle_cache_path(mkv_path: Path, track_id: int) -> Path:
     return CACHE_DIR / f"{cache_key}.srt"
 
 
-def get_context_cache_path(movie_title: str, movie_year: int) -> Path:
+def get_context_cache_path(media: MediaType) -> Path:
     """
     Generate cache path for translation context.
 
-    Sanitizes movie title to create a safe filename.
+    For movies: Uses {title}_{year}_context.json
+    For episodes: Uses {series}_{season}_{episode}_{year}_context.json
 
     Args:
-        movie_title: Movie title
-        movie_year: Movie year
+        media: Movie or Episode object
 
     Returns:
         Path to the cached context JSON file
     """
-    # Sanitize title - keep only alphanumeric, spaces, and underscores
-    safe_title = "".join(
-        c for c in f"{movie_title}_{movie_year}" if c.isalnum() or c in (" ", "_")
-    ).rstrip()
+    if is_movie(media):
+        # Sanitize title - keep only alphanumeric, spaces, and underscores
+        safe_title = "".join(
+            c for c in f"{media.title}_{media.year}" if c.isalnum() or c in (" ", "_")
+        ).rstrip()
+        # Replace spaces with underscores
+        safe_title = safe_title.replace(" ", "_")
+        return CACHE_DIR / f"{safe_title}_context.json"
+    else:  # is_episode
+        # For episodes: series_name_S##E##_year_context.json
+        safe_series = "".join(
+            c for c in media.series_name if c.isalnum() or c in (" ", "_")
+        ).rstrip()
+        safe_series = safe_series.replace(" ", "_")
+        return (
+            CACHE_DIR
+            / f"{safe_series}_S{media.season_number:02d}E{media.episode_number:02d}_{media.series_year}_context.json"
+        )
 
-    # Replace spaces with underscores
-    safe_title = safe_title.replace(" ", "_")
 
-    return CACHE_DIR / f"{safe_title}_context.json"
-
-
-def load_cached_context(
-    movie_title: str, movie_year: int
-) -> Optional[TranslationContext]:
+def load_cached_context(media: MediaType) -> Optional[TranslationContext]:
     """
     Load cached translation context if available.
 
     Args:
-        movie_title: Movie title
-        movie_year: Movie year
+        media: Movie or Episode object
 
     Returns:
         TranslationContext if cache exists and is valid, None otherwise
     """
-    context_path = get_context_cache_path(movie_title, movie_year)
+    context_path = get_context_cache_path(media)
 
     if not context_path.exists():
         return None
@@ -101,21 +108,18 @@ def load_cached_context(
         return None
 
 
-def save_context_cache(
-    context: TranslationContext, movie_title: str, movie_year: int
-) -> bool:
+def save_context_cache(context: TranslationContext, media: MediaType) -> bool:
     """
     Save translation context to cache.
 
     Args:
         context: Translation context to save
-        movie_title: Movie title
-        movie_year: Movie year
+        media: Movie or Episode object
 
     Returns:
         True if save successful, False otherwise
     """
-    context_path = get_context_cache_path(movie_title, movie_year)
+    context_path = get_context_cache_path(media)
 
     try:
         with open(context_path, "w", encoding="utf-8") as f:

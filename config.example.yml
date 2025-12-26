@@ -6,7 +6,8 @@ bazarr:
   api_key: "YOUR_BAZARR_API_KEY_HERE"
 
 # OpenAI settings
-# Note: OPENAI_API_KEY must be set as an environment variable
+# API key can be set here or via OPENAI_API_KEY environment variable
+# Get your API key from: https://platform.openai.com/api-keys
 #
 # Two-model approach for cost optimization:
 # - gpt-5 handles complex context analysis with rule interpretation
@@ -19,6 +20,7 @@ bazarr:
 #
 # Flex tier also provides automatic prompt caching (90% discount on cached tokens)
 openai:
+  api_key: "YOUR_OPENAI_API_KEY_HERE"  # Your OpenAI API key
   analysis_model: "gpt-5"       # Pass 1: Context analysis (complex rule interpretation)
   translation_model: "gpt-5"    # Pass 2: Translation (cost-optimized with flex tier)
   batch_size: 50                # Number of subtitles per API call
