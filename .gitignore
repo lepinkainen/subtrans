@@ -14,3 +14,5 @@ config.yml
 
 # Temprorary files
 tmp/
+.coverage
+coverage.json
