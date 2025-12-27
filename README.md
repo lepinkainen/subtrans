@@ -17,7 +17,7 @@ In my experience a two-pass approach significantly improves translation quality,
 
 ### Two-Pass Translation
 
-#### Pass 1: Context Analysis**
+#### Pass 1: Context Analysis
 
 - Analyzes complete subtitle file
 - Extracts character names, places, recurring terms
@@ -25,7 +25,7 @@ In my experience a two-pass approach significantly improves translation quality,
 - Saves context for consistent translation
 - If there are any errors, this is the place to correct them
 
-#### Pass 2: Batch Translation**
+#### Pass 2: Batch Translation
 
 - Translates in batches (default: 50 subtitles per API call)
 - Uses context from Pass 1 for consistency
