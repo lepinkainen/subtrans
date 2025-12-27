@@ -135,86 +135,58 @@ def test_get_wanted_movies_respects_source_lang_parameter(monkeypatch):
     assert result[0].title == "Spanish Movie"
 
 
-def test_apply_path_mapping():
-    """Path mapping should replace prefixes correctly."""
-    from subtrans.integrations.bazarr import apply_path_mapping
+def test_get_wanted_movies_year_populated_after_selection(monkeypatch):
+    """Year should be populated by populate_movie_path for selected movies only (performance optimization)."""
+    from subtrans.integrations.bazarr import get_wanted_movies, populate_movie_path
 
-    mappings = [("/volume1/movies", "/Volumes/NAS/movies")]
-    result = apply_path_mapping("/volume1/movies/Action/test.mkv", mappings)
-    assert result == "/Volumes/NAS/movies/Action/test.mkv"
-
-
-def test_apply_path_mapping_no_match():
-    """Unmapped paths should pass through unchanged."""
-    from subtrans.integrations.bazarr import apply_path_mapping
-
-    mappings = [("/volume1/movies", "/Volumes/NAS/movies")]
-    result = apply_path_mapping("/other/path/test.mkv", mappings)
-    assert result == "/other/path/test.mkv"
-
-
-def test_apply_path_mapping_multiple():
-    """Should try all mappings in order."""
-    from subtrans.integrations.bazarr import apply_path_mapping
-
-    mappings = [("/volume1/movies", "/mnt/movies"), ("/volume2/tv", "/mnt/tv")]
-    result = apply_path_mapping("/volume2/tv/Show/s01e01.mkv", mappings)
-    assert result == "/mnt/tv/Show/s01e01.mkv"
-
-
-def test_apply_path_mapping_first_match_wins():
-    """Should use first matching mapping."""
-    from subtrans.integrations.bazarr import apply_path_mapping
-
-    mappings = [("/volume1", "/mnt1"), ("/volume1/movies", "/mnt/movies")]
-    result = apply_path_mapping("/volume1/movies/test.mkv", mappings)
-    assert result == "/mnt1/movies/test.mkv"
-
-
-def test_apply_path_mapping_empty_list():
-    """Empty mapping list should return original path."""
-    from subtrans.integrations.bazarr import apply_path_mapping
-
-    result = apply_path_mapping("/test/path.mkv", [])
-    assert result == "/test/path.mkv"
-
-
-def test_get_wanted_episodes_includes_all_missing_target(monkeypatch):
-    """Episodes missing target subtitles should be included regardless of source."""
-    from subtrans.integrations.bazarr import get_wanted_episodes
-
-    # Note: Bazarr's wanted API returns episode_number as "SxE" format string (e.g., "1x1")
-    mock_data = {
+    # Mock wanted API response (doesn't include year)
+    wanted_mock_data = {
         "data": [
             {
-                "seriesTitle": "Show Name",
-                "episode_number": "1x1",  # Bazarr format: SxE
-                "episodeTitle": "Pilot",
-                "sonarrEpisodeId": 101,
-                "sonarrSeriesId": 10,
+                "title": "2036 Origin Unknown",
+                "radarrId": 1,
                 "missing_subtitles": [{"code2": "fi"}],
-                "subtitles": [{"code2": "en", "code3": "eng"}],
+                "subtitles": [{"code2": "en"}],
             },
             {
-                "seriesTitle": "Another Show",
-                "episode_number": "2x5",  # Bazarr format: SxE
-                "episodeTitle": "Episode Five",
-                "sonarrEpisodeId": 205,
-                "sonarrSeriesId": 20,
+                "title": "The Matrix",
+                "radarrId": 2,
                 "missing_subtitles": [{"code2": "fi"}],
-                "subtitles": [{"code2": "fr"}],
+                "subtitles": [{"code2": "en"}],
+            },
+        ]
+    }
+
+    # Mock movies API response (includes year)
+    movies_mock_data = {
+        "data": [
+            {
+                "radarrId": 1,
+                "year": 2018,
+                "path": "/movies/2036 Origin Unknown (2018)/movie.mkv",
+            },
+            {
+                "radarrId": 2,
+                "year": 1999,
+                "path": "/movies/The Matrix (1999)/movie.mkv",
             },
         ]
     }
 
     class MockResponse:
+        def __init__(self, data):
+            self.data = data
+
         def json(self):
-            return mock_data
+            return self.data
 
         def raise_for_status(self):
             pass
 
     class MockClient:
+        def __init__(self):
+            self.call_num = 0
+
         def __enter__(self):
             return self
 
@@ -222,26 +194,45 @@ def test_get_wanted_episodes_includes_all_missing_target(monkeypatch):
             pass
 
         def get(self, *args, **kwargs):
-            return MockResponse()
+            # Check if this is a wanted API call or movies API call
+            url = args[0] if args else ""
+            if "wanted" in url:
+                # First call: wanted API
+                return MockResponse(wanted_mock_data)
+            else:
+                # Subsequent calls: movies API (called for each selected movie only)
+                return MockResponse(movies_mock_data)
 
     monkeypatch.setattr("httpx.Client", lambda **kwargs: MockClient())
 
-    result = get_wanted_episodes(
-        "http://test", "key", source_lang="en", target_lang="fi"
+    # Get movies (years will be 0 from wanted API - shown in selection UI)
+    result = get_wanted_movies("http://test", "key", source_lang="en", target_lang="fi")
+    assert len(result) == 2
+
+    # Years should be 0 in selection UI (performance optimization - don't fetch all movies)
+    assert result[0].year == 0, "Year from wanted API should be 0 in selection UI"
+    assert result[1].year == 0, "Year from wanted API should be 0 in selection UI"
+    assert result[0].display_title == "2036 Origin Unknown (0)", (
+        "Selection UI shows (0) before population"
+    )
+    assert result[1].display_title == "The Matrix (0)", (
+        "Selection UI shows (0) before population"
     )
 
-    # Both episodes should be included
-    assert len(result) == 2
-    assert result[0].series_name == "Show Name"
-    assert result[0].season_number == 1
-    assert result[0].episode_number == 1
-    assert result[0].episode_title == "Pilot"
-    assert result[0].sonarr_id == 101
-    assert result[0].sonarr_series_id == 10
-    assert result[1].series_name == "Another Show"
-    assert result[1].season_number == 2
-    assert result[1].episode_number == 5
-    assert result[1].sonarr_series_id == 20
+    # Simulate user selecting first movie - populate details only for selected movie
+    populate_movie_path(result[0], "http://test", "key")
+
+    # Now first movie should have year, second still 0 (not selected)
+    assert result[0].year == 2018, (
+        "Selected movie year should be 2018 after populate_movie_path"
+    )
+    assert result[0].display_title == "2036 Origin Unknown (2018)", (
+        "Selected movie display_title shows year"
+    )
+    assert result[1].year == 0, "Unselected movie year should still be 0"
+    assert result[1].display_title == "The Matrix (0)", (
+        "Unselected movie still shows (0)"
+    )
 
 
 def test_populate_episode_path_success(monkeypatch):

@@ -308,7 +308,14 @@ def display_subtitle_tracks(
         is_selected = selected_track and track.track_id == selected_track.track_id
 
         # Format codec for display
-        codec_display = track.codec.replace("S_TEXT/", "").replace("UTF8", "SRT")
+        # Handle multiple codec string formats from mkvmerge:
+        # - S_TEXT/UTF8, S_TEXT/SRT (MKV Matroska)
+        # - SubRip/SRT (some tools use this format)
+        codec_display = (
+            track.codec.replace("S_TEXT/", "")
+            .replace("UTF8", "SRT")
+            .replace("SubRip/", "")
+        )
 
         # Check if codec is supported
         is_supported = codec_display in ["SRT"]

@@ -4,6 +4,7 @@ import json
 import re
 import time
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -136,6 +137,10 @@ def _is_likely_separator(text: str) -> bool:
     # Empty or known markers
     if stripped in ("[NEXT]", ""):
         return True
+
+    # Music symbols are valid content (indicate music/singing)
+    if "♪" in stripped or "♫" in stripped:
+        return False
 
     # No word characters = likely separator (handles ---, ***, ===, +++, etc.)
     # This is the key check: any line with only punctuation/whitespace
@@ -760,6 +765,9 @@ Third subtitle translation here"""
         f"[blue]Pass 2: Translating {len(subs)} subtitles in {total_batches} batches...[/blue]"
     )
 
+    # Track batch times for ETA calculation
+    batch_times: list[float] = []
+
     for i in range(0, len(subs), batch_size):
         batch = subs[i : i + batch_size]
         batch_num = i // batch_size + 1
@@ -888,10 +896,36 @@ Third subtitle translation here"""
                 )
                 translated.append(new_sub)
 
-        # Print batch completion message with elapsed time
+        # Print batch completion message with elapsed time and ETA
         batch_elapsed = time.time() - batch_start_time
+        batch_times.append(batch_elapsed)
+
+        # Build ETA string if not the last batch
+        eta_str = ""
+        if batch_num < total_batches:
+            avg_time = sum(batch_times) / len(batch_times)
+            remaining = total_batches - batch_num
+            eta_seconds = avg_time * remaining
+
+            # Convert to hours:minutes format
+            eta_hours = int(eta_seconds // 3600)
+            eta_minutes = int((eta_seconds % 3600) // 60)
+
+            if eta_seconds < 60:
+                eta_time_str = "< 1min"
+            elif eta_hours == 0:
+                eta_time_str = f"{eta_minutes}min"
+            else:
+                eta_time_str = f"{eta_hours}h {eta_minutes}min"
+
+            # Calculate wall-clock time
+            completion_time = datetime.now() + timedelta(seconds=eta_seconds)
+            eta_clock_str = completion_time.strftime("%H:%M")
+
+            eta_str = f" | ETA {eta_time_str} ({eta_clock_str})"
+
         console.print(
-            f"Batch ({batch_num:02d}/{total_batches:02d}) translated ({batch_elapsed:.1f}s)"
+            f"Batch ({batch_num:02d}/{total_batches:02d}) translated ({batch_elapsed:.1f}s){eta_str}"
         )
 
     return translated

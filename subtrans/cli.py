@@ -37,6 +37,15 @@ from .workflows import (
 
 def main():
     """Main entry point for subtrans CLI."""
+    try:
+        _main_impl()
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Translation cancelled by user (Ctrl-C)[/yellow]")
+        sys.exit(130)  # Standard exit code for SIGINT
+
+
+def _main_impl():
+    """Main implementation (wrapped by KeyboardInterrupt handler)."""
     args = parse_arguments()
 
     # Handle --stats option (doesn't require config)
@@ -180,6 +189,13 @@ def main():
             f"[green]Found {len(movies)} movies missing {config.target_language} subtitles[/green]"
         )
 
+        # Note: Wanted API doesn't include year field, so years will show as (0) in selection UI
+        # Years are populated for selected movies after selection
+        if len(movies) > 100:
+            console.print(
+                "[dim]Note: Movie years will be populated after selection (showing 0 in UI for performance)[/dim]"
+            )
+
         # Select movies
         if args.select:
             selected = select_by_pattern(
@@ -197,7 +213,7 @@ def main():
             console.print("[yellow]No movies selected.[/yellow]")
             sys.exit(0)
 
-        # Fetch full details (including paths) for selected movies only
+        # Fetch full details (including paths and years) for selected movies only
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -206,7 +222,7 @@ def main():
             console=console,
         ) as progress:
             task = progress.add_task(
-                f"[blue]Fetching paths for {len(selected)} movies...",
+                f"[blue]Fetching details for {len(selected)} movies...",
                 total=len(selected),
             )
             for movie in selected:

@@ -365,6 +365,22 @@ class TestIsLikelySeparator:
     def test_accepts_numbers(self):
         assert _is_likely_separator("123") is False
 
+    def test_accepts_music_note_single(self):
+        """Music note alone is valid content, not a separator."""
+        assert _is_likely_separator("♪") is False
+
+    def test_accepts_music_note_double(self):
+        """Double music note is valid content."""
+        assert _is_likely_separator("♫") is False
+
+    def test_accepts_music_note_with_text(self):
+        """Music note with lyrics is valid content."""
+        assert _is_likely_separator("♪ La la la ♪") is False
+
+    def test_accepts_music_note_italic(self):
+        """Music note in italic tags is valid content."""
+        assert _is_likely_separator("<i>♪ Singing ♪</i>") is False
+
 
 class TestIsValidTranslationContent:
     """Tests for translation content validation."""
@@ -407,6 +423,14 @@ class TestIsValidTranslationContent:
 
     def test_valid_mixed_content(self):
         assert _is_valid_translation_content("Osa 1 - Alku") is True
+
+    def test_valid_music_note_single(self):
+        """Music note alone is valid translation content."""
+        assert _is_valid_translation_content("♪") is True
+
+    def test_valid_music_note_with_lyrics(self):
+        """Music note with lyrics is valid translation content."""
+        assert _is_valid_translation_content("♪ Lauletaan ♪") is True
 
 
 class TestParseTranslationResponse:
@@ -592,3 +616,227 @@ class TestTranslateSubtitlesBatchParsing:
 
         # Originals kept due to parse failure
         assert result[0].text == "Line 1"
+
+
+class TestBatchETA:
+    """Tests for batch translation ETA display."""
+
+    def test_eta_shown_for_non_final_batch(self, monkeypatch):
+        """Test that ETA is displayed for non-final batches."""
+        import pysrt
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr("subtrans.processing.translator._sleep", lambda *_: None)
+
+        # Mock console.print to capture output
+        captured_prints = []
+
+        def mock_print(msg):
+            captured_prints.append(msg)
+
+        monkeypatch.setattr("subtrans.processing.translator.console.print", mock_print)
+
+        # Create mock client with successful responses
+        mock_client = Mock()
+        response = MagicMock()
+        response.choices = [MagicMock()]
+        response.usage = None
+        # Return translations for each batch
+        mock_client.chat.completions.create.side_effect = [
+            # Batch 1
+            type(
+                "obj",
+                (object,),
+                {
+                    "choices": [
+                        type(
+                            "obj",
+                            (object,),
+                            {
+                                "message": type(
+                                    "obj",
+                                    (object,),
+                                    {"content": "Käännös 1\n[NEXT]\nKäännös 2"},
+                                )()
+                            },
+                        )()
+                    ],
+                    "usage": None,
+                },
+            )(),
+            # Batch 2
+            type(
+                "obj",
+                (object,),
+                {
+                    "choices": [
+                        type(
+                            "obj",
+                            (object,),
+                            {
+                                "message": type(
+                                    "obj", (object,), {"content": "Käännös 3"}
+                                )()
+                            },
+                        )()
+                    ],
+                    "usage": None,
+                },
+            )(),
+        ]
+
+        # Create subtitle file with 3 items (2 batches with batch_size=2)
+        subs = pysrt.SubRipFile()
+        subs.append(
+            pysrt.SubRipItem(1, start="00:00:01,000", end="00:00:02,000", text="Line 1")
+        )
+        subs.append(
+            pysrt.SubRipItem(2, start="00:00:03,000", end="00:00:04,000", text="Line 2")
+        )
+        subs.append(
+            pysrt.SubRipItem(3, start="00:00:05,000", end="00:00:06,000", text="Line 3")
+        )
+
+        # Translate with batch_size=2 to create 2 batches
+        result = translate_subtitles_batch(
+            subs, mock_client, "Test Movie", context=None, batch_size=2, model="gpt-4o"
+        )
+
+        # Verify result
+        assert len(result) == 3
+
+        # Check that ETA appears in batch 1 message (non-final batch)
+        batch_1_messages = [
+            msg
+            for msg in captured_prints
+            if "Batch (01/02)" in msg and "translated" in msg
+        ]
+        assert len(batch_1_messages) == 1
+        assert "ETA" in batch_1_messages[0], "ETA should appear for non-final batch"
+        assert "|" in batch_1_messages[0], "ETA separator should appear"
+
+    def test_no_eta_on_final_batch(self, monkeypatch):
+        """Test that ETA is not displayed for the final batch."""
+        import pysrt
+
+        monkeypatch.setattr("subtrans.processing.translator._sleep", lambda *_: None)
+
+        # Mock console.print to capture output
+        captured_prints = []
+
+        def mock_print(msg):
+            captured_prints.append(msg)
+
+        monkeypatch.setattr("subtrans.processing.translator.console.print", mock_print)
+
+        # Create mock client with successful response
+        mock_client = Mock()
+        mock_client.chat.completions.create.return_value = type(
+            "obj",
+            (object,),
+            {
+                "choices": [
+                    type(
+                        "obj",
+                        (object,),
+                        {
+                            "message": type(
+                                "obj",
+                                (object,),
+                                {"content": "Käännös 1\n[NEXT]\nKäännös 2"},
+                            )()
+                        },
+                    )()
+                ],
+                "usage": None,
+            },
+        )()
+
+        # Create subtitle file with 2 items (1 batch with batch_size=2)
+        subs = pysrt.SubRipFile()
+        subs.append(
+            pysrt.SubRipItem(1, start="00:00:01,000", end="00:00:02,000", text="Line 1")
+        )
+        subs.append(
+            pysrt.SubRipItem(2, start="00:00:03,000", end="00:00:04,000", text="Line 2")
+        )
+
+        # Translate with batch_size=2 to create only 1 batch
+        result = translate_subtitles_batch(
+            subs, mock_client, "Test Movie", context=None, batch_size=2, model="gpt-4o"
+        )
+
+        # Verify result
+        assert len(result) == 2
+
+        # Check that ETA does NOT appear in final batch message
+        batch_messages = [
+            msg
+            for msg in captured_prints
+            if "Batch (01/01)" in msg and "translated" in msg
+        ]
+        assert len(batch_messages) == 1
+        assert "ETA" not in batch_messages[0], "ETA should not appear for final batch"
+
+    def test_eta_time_format(self, monkeypatch):
+        """Test that ETA time is formatted correctly."""
+        import pysrt
+        import re
+
+        monkeypatch.setattr("subtrans.processing.translator._sleep", lambda *_: None)
+
+        # Mock console.print to capture output
+        captured_prints = []
+
+        def mock_print(msg):
+            captured_prints.append(msg)
+
+        monkeypatch.setattr("subtrans.processing.translator.console.print", mock_print)
+
+        # Create mock client with successful responses for multiple batches
+        mock_client = Mock()
+        mock_client.chat.completions.create.return_value = type(
+            "obj",
+            (object,),
+            {
+                "choices": [
+                    type(
+                        "obj",
+                        (object,),
+                        {"message": type("obj", (object,), {"content": "Käännös"})()},
+                    )()
+                ],
+                "usage": None,
+            },
+        )()
+
+        # Create subtitle file with 5 items (5 batches with batch_size=1)
+        subs = pysrt.SubRipFile()
+        for i in range(5):
+            subs.append(
+                pysrt.SubRipItem(
+                    i + 1,
+                    start=f"00:00:0{i},000",
+                    end=f"00:00:0{i + 1},000",
+                    text=f"Line {i + 1}",
+                )
+            )
+
+        # Translate with batch_size=1 to create 5 batches
+        result = translate_subtitles_batch(
+            subs, mock_client, "Test Movie", context=None, batch_size=1, model="gpt-4o"
+        )
+
+        # Verify result
+        assert len(result) == 5
+
+        # Check that ETA format is correct (should match "ETA Xmin (HH:MM)" or "ETA Xh Ymin (HH:MM)" or "ETA < 1min (HH:MM)")
+        batch_messages = [
+            msg for msg in captured_prints if "ETA" in msg and "translated" in msg
+        ]
+        assert len(batch_messages) >= 1, "Should have at least one batch with ETA"
+
+        # Check format with regex: should match "ETA (< 1min|Xmin|Xh Ymin) (HH:MM)"
+        eta_pattern = re.compile(r"ETA (< 1min|\d+min|\d+h \d+min) \(\d{2}:\d{2}\)")
+        for msg in batch_messages:
+            assert eta_pattern.search(msg), f"ETA format should match pattern in: {msg}"

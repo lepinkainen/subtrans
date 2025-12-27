@@ -59,14 +59,13 @@ def get_wanted_movies(
             # since many movies have embedded subtitles in MKV files that Bazarr doesn't track
             # The source subtitle check will happen during movie processing
 
-            # Note: path will be empty here, we'll fetch it after user selection
-            # Note: year will be 0 here, we'll fetch it along with path after selection
+            # Note: path and year will be empty/0 here, we'll fetch them before selection
             movies.append(
                 Movie(
                     radarr_id=item.get("radarrId"),
                     title=item.get("title", "Unknown"),
-                    year=0,  # Will be populated along with path after selection
-                    path="",  # Will be populated after selection
+                    year=0,  # Will be populated before selection
+                    path="",  # Will be populated before selection
                     missing_subtitles=missing_langs,
                     existing_subtitles=item.get("subtitles", []),
                 )
