@@ -47,13 +47,13 @@ Translates English subtitles to Finnish using OpenAI GPT models with context-awa
 
 ```bash
 # Run with default config
-uv run main.py
+uv run subtrans
 
 # Use custom config file
-uv run main.py --config /path/to/config.yml
+uv run subtrans --config /path/to/config.yml
 ```
 
-**Note**: The tool only displays movies that have both missing target language subtitles and available source language subtitles. Movies without source language subtitles are automatically skipped with a log message.
+**Note**: Movies missing the target language subtitles are displayed for selection. During processing (Phase 1), movies without source language subtitles (English) are automatically skipped with a console message. This includes embedded MKV subtitles that Bazarr may not track.
 
 ## Configuration
 
@@ -102,6 +102,8 @@ The tool searches for English subtitles in this order:
 ### Output
 
 Translated subtitles are saved as `<movie_name>.fi.srt` in the same directory as the source video file.
+
+**Fallback**: If writing to the media directory fails (e.g., NAS permission errors), subtitles are saved to `~/.cache/subtrans/<movie_name>_<year>.fi.srt` instead. Check the console output for the actual save location.
 
 ## License
 
