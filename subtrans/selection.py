@@ -345,7 +345,7 @@ def select_movies_fzf(
         console.print(
             "[dim]Tip: Use --force-fzf flag to try fzf interface anyway[/dim]"
         )
-        from .cli import select_movies_legacy
+        from .cli_ui import select_movies_legacy
 
         return select_movies_legacy(movies, target_lang)
 
@@ -398,7 +398,7 @@ def select_movies_fzf(
             "[yellow]This may happen if running in a non-standard terminal[/yellow]"
         )
         console.print("[yellow]Falling back to standard selection...[/yellow]")
-        from .cli import select_movies_legacy
+        from .cli_ui import select_movies_legacy
 
         return select_movies_legacy(movies, target_lang)
     except Exception as e:
@@ -406,7 +406,7 @@ def select_movies_fzf(
         # Fall back to the original interface
         console.print("[yellow]Falling back to standard selection...[/yellow]")
         # Import here to avoid circular dependency
-        from .cli import select_movies_legacy
+        from .cli_ui import select_movies_legacy
 
         return select_movies_legacy(movies, target_lang)
 
@@ -443,7 +443,7 @@ def select_episodes_fzf(
         console.print(
             "[dim]Tip: Use --force-fzf flag to try fzf interface anyway[/dim]"
         )
-        from .cli import select_episodes_legacy
+        from .cli_ui import select_episodes_legacy
 
         return select_episodes_legacy(episodes, target_lang)
 
@@ -498,7 +498,7 @@ def select_episodes_fzf(
             "[yellow]This may happen if running in a non-standard terminal[/yellow]"
         )
         console.print("[yellow]Falling back to standard selection...[/yellow]")
-        from .cli import select_episodes_legacy
+        from .cli_ui import select_episodes_legacy
 
         return select_episodes_legacy(episodes, target_lang)
     except Exception as e:
@@ -506,6 +506,6 @@ def select_episodes_fzf(
         # Fall back to the original interface
         console.print("[yellow]Falling back to standard selection...[/yellow]")
         # Import here to avoid circular dependency
-        from .cli import select_episodes_legacy
+        from .cli_ui import select_episodes_legacy
 
         return select_episodes_legacy(episodes, target_lang)

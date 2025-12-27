@@ -1,11 +1,11 @@
 # Subtitle Translator
 
-Translates English subtitles to Finnish using OpenAI GPT models with context-aware two-pass translation.
+Translates subtitles between languages using OpenAI GPT models with context-aware two-pass translation.
 
 ## Features
 
 - **Bazarr Integration**: Automatically finds movies missing Finnish subtitles
-- **Source Language Filtering**: Automatically filters movies to only show those with available source language subtitles
+- **Source Language Checks**: Skips titles without source language subtitles during processing (not during the Bazarr query)
 - **Context-Aware Translation**: Analyzes subtitle content to maintain consistency in character names, terminology, and tone
 - **Two-Pass Approach**: First analyzes context, then translates with full context awareness
 - **Path Mapping**: Maps NAS paths to local mount points for laptop/SMB usage
@@ -53,7 +53,7 @@ uv run subtrans
 uv run subtrans --config /path/to/config.yml
 ```
 
-**Note**: Movies missing the target language subtitles are displayed for selection. During processing (Phase 1), movies without source language subtitles (English) are automatically skipped with a console message. This includes embedded MKV subtitles that Bazarr may not track.
+**Note**: Movies missing the target language subtitles are displayed for selection. During processing (Phase 1), movies without source language subtitles (English) are skipped with a console message. This includes embedded MKV subtitles that Bazarr may not track.
 
 ## Configuration
 
@@ -84,12 +84,12 @@ validation:
 
 ```yaml
 subtitle_selection:
-  interactive_track_selection: false  # Prompt user to select track when multiple found
-  auto_select_tracks: true           # Automatically select first matching track
+  interactive_track_selection: true   # Prompt user to select track when multiple found
+  auto_select_tracks: false           # Skip prompts and use automatic selection
 ```
 
 - `interactive_track_selection: true`: Shows menu when multiple English subtitle tracks found
-- `auto_select_tracks: true`: Automatically picks first English track (faster, recommended for most users)
+- `auto_select_tracks: true`: Skips prompts and uses automatic track selection (overrides interactive_track_selection)
 
 #### Language Configuration
 

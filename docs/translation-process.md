@@ -129,15 +129,15 @@ flowchart TD
 
     S1 --> Count1{Count = expected?}
     Count1 --> |Yes| Validate
-    Count1 --> |No, got 1| S2[Strategy 2: Split by [NEXT]]
+    Count1 --> |No<br/>(single result,<br/>expected > 1)| S2[Strategy 2: Split by [NEXT]]
 
     S2 --> Count2{Count = expected?}
     Count2 --> |Yes| Validate
-    Count2 --> |No, got 1| S3[Strategy 3: Split by \\n---\\n]
+    Count2 --> |No<br/>(single result,<br/>expected > 1)| S3[Strategy 3: Split by \\n---\\n]
 
     S3 --> Count3{Count = expected?}
     Count3 --> |Yes| Validate
-    Count3 --> |No, got 1| S4[Strategy 4: Fallback<br/>Split by \\n, filter separators]
+    Count3 --> |No<br/>(single result,<br/>expected > 1)| S4[Strategy 4: Fallback<br/>Split by \\n, filter separators]
 
     S4 --> Filter[Filter with _is_likely_separator:<br/>- No word characters?<br/>- Repeated chars ^^^.^^^?<br/>- Known markers?]
     Filter --> Count4{Count = expected?}

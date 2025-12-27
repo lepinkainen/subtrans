@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 
 def test_extract_only_skips_translation(tmp_path):
     """Should skip translation when extract_only is True."""
-    from subtrans.cli import process_movie_phase1
+    from subtrans.workflows import process_movie_phase1
     from subtrans.core.models import Movie, Config
 
     # Create a test SRT file
@@ -34,7 +34,7 @@ Test subtitle
     config.auto_select_tracks = True
 
     # Mock the subtitle finding
-    with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
+    with patch("subtrans.workflows.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (
             srt_path,
             False,
@@ -57,7 +57,7 @@ Test subtitle
 
 def test_extract_only_loads_subtitle(tmp_path):
     """Should load subtitle file in extract-only mode."""
-    from subtrans.cli import process_movie_phase1
+    from subtrans.workflows import process_movie_phase1
     from subtrans.core.models import Movie, Config
 
     # Create a test SRT file with multiple entries
@@ -88,7 +88,7 @@ Second subtitle
     config.interactive_track_selection = False
     config.auto_select_tracks = True
 
-    with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
+    with patch("subtrans.workflows.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (srt_path, False)
 
         result = process_movie_phase1(
@@ -106,7 +106,7 @@ Second subtitle
 
 def test_extract_only_handles_missing_subtitle():
     """Should fail gracefully when subtitle not found in extract-only mode."""
-    from subtrans.cli import process_movie_phase1
+    from subtrans.workflows import process_movie_phase1
     from subtrans.core.models import Movie, Config
 
     movie = Movie(
@@ -123,7 +123,7 @@ def test_extract_only_handles_missing_subtitle():
     config.interactive_track_selection = False
     config.auto_select_tracks = True
 
-    with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
+    with patch("subtrans.workflows.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (
             None,
             False,
@@ -142,7 +142,7 @@ def test_extract_only_handles_missing_subtitle():
 
 def test_show_context_functionality():
     """Test that context is always shown in phase1 (no show_context param)."""
-    from subtrans.cli import process_movie_phase1
+    from subtrans.workflows import process_movie_phase1
     import inspect
 
     # Phase 1 always shows context - verify no show_context parameter
@@ -154,7 +154,7 @@ def test_show_context_functionality():
 
 def test_normal_mode_requires_client():
     """Should require OpenAI client when not in extract-only mode."""
-    from subtrans.cli import process_movie_phase1
+    from subtrans.workflows import process_movie_phase1
     from subtrans.core.models import Movie, Config
 
     movie = Movie(
@@ -174,7 +174,7 @@ def test_normal_mode_requires_client():
     # Normal mode (extract_only=False) would fail without proper client
     # This is more of a contract test - actual translation requires OpenAI
     # Just verify the parameter exists and defaults to False
-    with patch("subtrans.cli.get_source_subtitle") as mock_get_sub:
+    with patch("subtrans.workflows.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (None, False)
 
         result = process_movie_phase1(
@@ -190,7 +190,7 @@ def test_normal_mode_requires_client():
 
 def test_select_by_pattern_exact_movie_match():
     """Should match movie by exact title."""
-    from subtrans.cli import select_by_pattern
+    from subtrans.cli_ui import select_by_pattern
     from subtrans.core.models import Movie
 
     movies = [
@@ -220,7 +220,7 @@ def test_select_by_pattern_exact_movie_match():
 
 def test_select_by_pattern_wildcard_movie():
     """Should match movies with wildcard pattern."""
-    from subtrans.cli import select_by_pattern
+    from subtrans.cli_ui import select_by_pattern
     from subtrans.core.models import Movie
 
     movies = [
@@ -258,7 +258,7 @@ def test_select_by_pattern_wildcard_movie():
 
 def test_select_by_pattern_case_insensitive():
     """Should match case-insensitively."""
-    from subtrans.cli import select_by_pattern
+    from subtrans.cli_ui import select_by_pattern
     from subtrans.core.models import Movie
 
     movies = [
@@ -284,7 +284,7 @@ def test_select_by_pattern_case_insensitive():
 def test_select_by_pattern_no_matches():
     """Should exit with error when no matches found."""
     import pytest
-    from subtrans.cli import select_by_pattern
+    from subtrans.cli_ui import select_by_pattern
     from subtrans.core.models import Movie
 
     movies = [
@@ -306,7 +306,7 @@ def test_select_by_pattern_no_matches():
 
 def test_select_by_pattern_display_title_with_year():
     """Should match against display title including year."""
-    from subtrans.cli import select_by_pattern
+    from subtrans.cli_ui import select_by_pattern
     from subtrans.core.models import Movie
 
     movies = [
@@ -337,7 +337,7 @@ def test_select_by_pattern_display_title_with_year():
 
 def test_select_by_pattern_episode_series_name():
     """Should match episode by series name."""
-    from subtrans.cli import select_by_pattern
+    from subtrans.cli_ui import select_by_pattern
     from subtrans.core.models import Episode
 
     episodes = [
@@ -373,7 +373,7 @@ def test_select_by_pattern_episode_series_name():
 
 def test_select_by_pattern_episode_title():
     """Should match episode by episode title."""
-    from subtrans.cli import select_by_pattern
+    from subtrans.cli_ui import select_by_pattern
     from subtrans.core.models import Episode
 
     episodes = [
@@ -409,7 +409,7 @@ def test_select_by_pattern_episode_title():
 
 def test_select_by_pattern_episode_season_episode():
     """Should match episode by season/episode number in display."""
-    from subtrans.cli import select_by_pattern
+    from subtrans.cli_ui import select_by_pattern
     from subtrans.core.models import Episode
 
     episodes = [
@@ -446,7 +446,7 @@ def test_select_by_pattern_episode_season_episode():
 
 def test_select_by_pattern_select_all():
     """Should select all items with wildcard '*'."""
-    from subtrans.cli import select_by_pattern
+    from subtrans.cli_ui import select_by_pattern
     from subtrans.core.models import Movie
 
     movies = [
