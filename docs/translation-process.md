@@ -214,11 +214,7 @@ flowchart TD
 
     Patterns --> Found1{Found?}
     Found1 --> |Yes| Return1([Use external SRT])
-    Found1 --> |No| Fallback[Check any *.srt file]
-
-    Fallback --> Found2{Found?}
-    Found2 --> |Yes| Return1
-    Found2 --> |No| Embedded
+    Found1 --> |No| Embedded
 
     Embedded --> MKVInfo[Run mkvmerge -J to get tracks]
     MKVInfo --> Filter[Filter:<br/>- Text subtitles only<br/>- Language: eng/en/english]
