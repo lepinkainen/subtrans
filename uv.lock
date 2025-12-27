@@ -386,12 +386,11 @@ wheels = [
 
 [[package]]
 name = "pysrt"
-version = "1.1.2"
-source = { registry = "https://pypi.org/simple" }
+version = "1.2.0"
+source = { git = "https://github.com/lepinkainen/pysrt.git?rev=main#558a9c99797d289068964a0b8c960badcdf994ec" }
 dependencies = [
     { name = "chardet" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/31/1a/0d858da1c6622dcf16011235a2639b0a01a49cecf812f8ab03308ab4de37/pysrt-1.1.2.tar.gz", hash = "sha256:b4f844ba33e4e7743e9db746492f3a193dc0bc112b153914698e7c1cdeb9b0b9", size = 104371, upload-time = "2020-01-20T15:22:28.291Z" }
 
 [[package]]
 name = "pytest"
@@ -531,7 +530,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13.0" },
     { name = "openai", specifier = ">=2.8.1" },
     { name = "prompt-toolkit", specifier = ">=3.0.47" },
-    { name = "pysrt", specifier = ">=1.1.2" },
+    { name = "pysrt", git = "https://github.com/lepinkainen/pysrt.git?rev=main" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },

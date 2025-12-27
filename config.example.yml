@@ -94,3 +94,20 @@ subtitle_selection:
                                      # true: Never show prompts (fully automatic mode)
                                      # false: Show prompts when interactive_track_selection is true
                                      # Note: auto_select_tracks overrides interactive_track_selection
+
+# Advanced subtitle validation (powered by pysrt)
+# Comprehensive validation checks for subtitle integrity before translation
+# These checks validate timing, duration, text length, and overlaps
+pysrt_validation:
+  validate_subtitles: true      # Enable comprehensive pysrt validation
+  min_duration_ms: 500          # Minimum subtitle duration (500ms default)
+  max_duration_secs: 10.0       # Maximum subtitle duration (10s default)
+  min_text_length: 2            # Minimum text length per subtitle
+  max_text_length: 500          # Maximum text length per subtitle
+
+# Subtitle timing fixes (powered by pysrt)
+# Fixes overlapping subtitles after translation (text length changes after translation)
+output:
+  fix_overlaps: true            # Automatically fix overlapping subtitles after translation
+  overlap_buffer_ms: 20         # Minimum gap between subtitles in milliseconds
+                                # Uses word-count-based optimal duration calculation

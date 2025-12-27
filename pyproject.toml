@@ -8,7 +8,7 @@ dependencies = [
     "httpx>=0.28.1",
     "openai>=2.8.1",
     "prompt-toolkit>=3.0.47",
-    "pysrt>=1.1.2",
+    "pysrt @ git+https://github.com/lepinkainen/pysrt.git@main",
     "pyyaml>=6.0.3",
     "rich>=14.2.0",
 ]

@@ -76,4 +76,17 @@ def load_config(config_path: Path) -> Config:
         auto_select_tracks=data.get("subtitle_selection", {}).get(
             "auto_select_tracks", False
         ),
+        # pysrt validation settings with defaults for backward compatibility
+        validate_subtitles=data.get("pysrt_validation", {}).get(
+            "validate_subtitles", True
+        ),
+        min_duration_ms=data.get("pysrt_validation", {}).get("min_duration_ms", 500),
+        max_duration_secs=data.get("pysrt_validation", {}).get(
+            "max_duration_secs", 10.0
+        ),
+        min_text_length=data.get("pysrt_validation", {}).get("min_text_length", 2),
+        max_text_length=data.get("pysrt_validation", {}).get("max_text_length", 500),
+        # Overlap fixing settings with defaults for backward compatibility
+        fix_overlaps=data.get("output", {}).get("fix_overlaps", True),
+        overlap_buffer_ms=data.get("output", {}).get("overlap_buffer_ms", 20),
     )

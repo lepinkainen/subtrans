@@ -150,6 +150,15 @@ class Config:
     # Track selection behavior
     interactive_track_selection: bool = True  # Show track table and prompt user
     auto_select_tracks: bool = False  # Skip prompts, use automatic selection
+    # pysrt validation settings (comprehensive subtitle checks)
+    validate_subtitles: bool = True  # Enable pysrt subtitle validation
+    min_duration_ms: float = 500  # Minimum subtitle duration
+    max_duration_secs: float = 10.0  # Maximum subtitle duration
+    min_text_length: int = 2  # Minimum text length per subtitle
+    max_text_length: int = 500  # Maximum text length per subtitle
+    # Overlap fixing settings
+    fix_overlaps: bool = True  # Fix overlapping subtitles after translation
+    overlap_buffer_ms: int = 20  # Minimum gap between subtitles
 
 
 @dataclass

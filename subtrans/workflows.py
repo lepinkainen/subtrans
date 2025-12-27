@@ -215,6 +215,27 @@ def process_movie_phase1(
     if subs is None:
         return False
 
+    # pysrt comprehensive validation (timing, duration, overlaps, text length)
+    if config.validate_subtitles:
+        errors = subs.validate(
+            min_duration_ms=config.min_duration_ms,
+            max_duration_secs=config.max_duration_secs,
+            min_text_length=config.min_text_length,
+            max_text_length=config.max_text_length,
+        )
+        if errors:
+            console.print(f"[red]Found {len(errors)} subtitle validation errors:[/red]")
+            for err in errors[:10]:  # Show first 10 errors
+                console.print(
+                    f"  [yellow]#{err.position:3d}[/yellow] [{err.error_type:12s}] {err.message}"
+                )
+            if len(errors) > 10:
+                console.print(f"  [dim]... and {len(errors) - 10} more errors[/dim]")
+            console.print(
+                "[yellow]Subtitle has validation issues. This may indicate corruption.[/yellow]"
+            )
+            return False
+
     if extract_only:
         console.print(
             "[yellow]Extract-only mode - subtitle cached successfully[/yellow]"
@@ -427,6 +448,11 @@ def process_movie_phase2(
         service_tier=service_tier,
     )
 
+    # Fix overlapping subtitles (translation changes text length)
+    if config.fix_overlaps:
+        console.print("[blue]Fixing overlapping subtitles...[/blue]")
+        translated.fix_overlaps(buffer_ms=config.overlap_buffer_ms)
+
     # Save translated subtitles
     mkv_path = find_mkv_file(movie.path)
     output_path = save_translated_subtitle(
@@ -532,6 +558,27 @@ def process_episode_phase1(
 
     if subs is None:
         return False
+
+    # pysrt comprehensive validation (timing, duration, overlaps, text length)
+    if config.validate_subtitles:
+        errors = subs.validate(
+            min_duration_ms=config.min_duration_ms,
+            max_duration_secs=config.max_duration_secs,
+            min_text_length=config.min_text_length,
+            max_text_length=config.max_text_length,
+        )
+        if errors:
+            console.print(f"[red]Found {len(errors)} subtitle validation errors:[/red]")
+            for err in errors[:10]:  # Show first 10 errors
+                console.print(
+                    f"  [yellow]#{err.position:3d}[/yellow] [{err.error_type:12s}] {err.message}"
+                )
+            if len(errors) > 10:
+                console.print(f"  [dim]... and {len(errors) - 10} more errors[/dim]")
+            console.print(
+                "[yellow]Subtitle has validation issues. This may indicate corruption.[/yellow]"
+            )
+            return False
 
     if extract_only:
         console.print(
@@ -747,6 +794,11 @@ def process_episode_phase2(
         log_token_usage=log_token_usage,
         service_tier=service_tier,
     )
+
+    # Fix overlapping subtitles (translation changes text length)
+    if config.fix_overlaps:
+        console.print("[blue]Fixing overlapping subtitles...[/blue]")
+        translated.fix_overlaps(buffer_ms=config.overlap_buffer_ms)
 
     # Save translated subtitles
     mkv_path = find_mkv_file(episode.path)
