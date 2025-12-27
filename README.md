@@ -66,6 +66,41 @@ All settings are managed in `config.yml`:
 
 See `config.example.yml` for detailed configuration options.
 
+### Configuration Options
+
+#### Validation Settings
+
+```yaml
+validation:
+  min_subtitle_count: 50          # Minimum expected subtitle entries
+  min_subtitle_file_size: 2048    # Minimum file size in bytes (detects corrupted files)
+  strict_validation: true         # Require user confirmation for low-quality subtitles
+```
+
+- `strict_validation: true`: Prompts for action when subtitle quality is low (options: continue, re-extract, skip)
+- `strict_validation: false`: Only warns about low quality, continues automatically
+
+#### Subtitle Track Selection
+
+```yaml
+subtitle_selection:
+  interactive_track_selection: false  # Prompt user to select track when multiple found
+  auto_select_tracks: true           # Automatically select first matching track
+```
+
+- `interactive_track_selection: true`: Shows menu when multiple English subtitle tracks found
+- `auto_select_tracks: true`: Automatically picks first English track (faster, recommended for most users)
+
+#### Language Configuration
+
+```yaml
+languages:
+  source: en    # Source language code (English)
+  target: fi    # Target language code (Finnish)
+```
+
+Supported language codes: ISO 639-1 (2-letter codes like `en`, `fi`, `es`, `de`)
+
 ## Path Mapping
 
 When running from a laptop with NAS mounted via SMB, configure path mappings:
