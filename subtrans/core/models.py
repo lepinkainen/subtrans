@@ -28,6 +28,7 @@ class MediaItem(Protocol):
         """Unique tuple for cache lookups."""
         ...
 
+    path: str  # Mutable path field (can be updated by path mapping)
     missing_subtitles: list[str]
     existing_subtitles: list[dict]
 
