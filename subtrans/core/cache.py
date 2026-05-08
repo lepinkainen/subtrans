@@ -3,11 +3,23 @@
 import hashlib
 import json
 from pathlib import Path
-from typing import Optional
 
-from .models import TranslationContext
-from .media_types import MediaType, is_movie, is_episode
+from .media_types import is_episode, is_movie
+from .models import ContextResponse, MediaItem, TranslationContext
 from .utils import CACHE_DIR, console
+
+
+def clear_cached_subtitle(srt_path: Path) -> bool:
+    """Delete a cached SRT file if it lives inside ``CACHE_DIR``.
+
+    Refuses to operate on paths outside the cache root, so callers don't
+    accidentally remove the user's source SRT next to the video file.
+    Returns True if a file was removed.
+    """
+    if CACHE_DIR not in srt_path.parents:
+        return False
+    srt_path.unlink(missing_ok=True)
+    return True
 
 
 def get_subtitle_cache_path(mkv_path: Path, track_id: int) -> Path:
@@ -27,7 +39,7 @@ def get_subtitle_cache_path(mkv_path: Path, track_id: int) -> Path:
     return CACHE_DIR / f"{cache_key}.srt"
 
 
-def get_context_cache_path(media: MediaType) -> Path:
+def get_context_cache_path(media: MediaItem) -> Path:
     """
     Generate cache path for translation context.
 
@@ -63,15 +75,11 @@ def get_context_cache_path(media: MediaType) -> Path:
         return CACHE_DIR / "unknown_context.json"
 
 
-def load_cached_context(media: MediaType) -> Optional[TranslationContext]:
-    """
-    Load cached translation context if available.
+def load_cached_context(media: MediaItem) -> TranslationContext | None:
+    """Load cached translation context if available.
 
-    Args:
-        media: Movie or Episode object
-
-    Returns:
-        TranslationContext if cache exists and is valid, None otherwise
+    Returns ``None`` if the cache file is absent or unparseable; the caller
+    will fall back to a fresh analysis pass.
     """
     context_path = get_context_cache_path(media)
 
@@ -79,54 +87,38 @@ def load_cached_context(media: MediaType) -> Optional[TranslationContext]:
         return None
 
     try:
-        with open(context_path, "r", encoding="utf-8") as f:
-            cached_data = json.load(f)
-
-        context = TranslationContext(
-            characters=cached_data.get("characters", {}),
-            places=cached_data.get("places", {}),
-            terms=cached_data.get("recurring_terms", {}),
-            genre=cached_data.get("genre", "unknown"),
-            tone=cached_data.get("tone", "mixed"),
-            formality=cached_data.get("formality_recommendation", "sinä"),
-            style_notes=cached_data.get("style_notes", ""),
-            domains=cached_data.get("domains", []),
-            domain_glossaries=cached_data.get("domain_glossaries", {}),
-            raw_json=cached_data,
-        )
-
-        console.print("[green]Using cached context from previous run[/green]")
-        console.print(f"[dim]Cache: {context_path}[/dim]")
-        console.print(
-            f"[green]Loaded {len(context.characters)} characters, "
-            f"{len(context.places)} places, "
-            f"{len(context.terms)} recurring terms[/green]"
-        )
-
-        return context
-
+        raw_text = context_path.read_text(encoding="utf-8")
+        parsed = ContextResponse.model_validate_json(raw_text)
+        # Preserve the on-disk JSON for downstream code that reads `raw_json`
+        # (notably the diff/edit prompts in workflows).
+        raw_json = json.loads(raw_text)
+        context = parsed.to_translation_context(raw_json=raw_json)
     except Exception as e:
         console.print(f"[yellow]Failed to load cached context: {e}[/yellow]")
         console.print("[blue]Running fresh analysis...[/blue]")
         return None
 
+    console.print("[green]Using cached context from previous run[/green]")
+    console.print(f"[dim]Cache: {context_path}[/dim]")
+    console.print(
+        f"[green]Loaded {len(context.characters)} characters, "
+        f"{len(context.places)} places, "
+        f"{len(context.terms)} recurring terms[/green]"
+    )
+    return context
 
-def save_context_cache(context: TranslationContext, media: MediaType) -> bool:
-    """
-    Save translation context to cache.
 
-    Args:
-        context: Translation context to save
-        media: Movie or Episode object
+def save_context_cache(context: TranslationContext, media: MediaItem) -> bool:
+    """Persist a translation context to the cache directory.
 
-    Returns:
-        True if save successful, False otherwise
+    Returns True on success.
     """
     context_path = get_context_cache_path(media)
-
     try:
-        with open(context_path, "w", encoding="utf-8") as f:
-            json.dump(context.raw_json, f, indent=2, ensure_ascii=False)
+        context_path.write_text(
+            json.dumps(context.raw_json, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
         console.print(f"[dim]Saved context: {context_path}[/dim]")
         return True
     except Exception as e:

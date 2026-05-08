@@ -6,18 +6,15 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 import pysrt
 from openai import APIStatusError, OpenAI, RateLimitError
 from openai.types.chat.chat_completion import ChatCompletion
 
-from ..core.models import TranslationContext
+from ..core.models import ContextResponse, ServiceTier, TranslationContext
 from ..core.token_logger import log_token_usage as log_tokens
 from ..core.utils import console
-
-# Type alias for OpenAI service tier parameter
-ServiceTier = Literal["auto", "default", "flex", "scale", "priority"]
 
 # Directory containing prompt templates
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
@@ -355,11 +352,8 @@ def _call_with_retries(
             )
             _sleep(delay)
 
-    # Should not reach here, but raise last exception to be safe
     if last_exception:
         raise last_exception
-
-    # This should never be reached, but mypy needs it
     raise RuntimeError("Unexpected error: all attempts failed without raising")
 
 
@@ -372,7 +366,7 @@ def analyze_subtitles(
     target_lang: str = "fi",
     movie_year: int | None = None,
     log_token_usage: bool = True,
-    service_tier: str = "auto",
+    service_tier: ServiceTier = "auto",
 ) -> TranslationContext:
     """
     First pass: Analyze full subtitle file to extract translation context.
@@ -404,8 +398,6 @@ def analyze_subtitles(
     console.print(
         f"[dim]Model: {model}, Service tier: {service_tier}, Timeout: {timeout}s[/dim]"
     )
-    # Cast service_tier to the correct Literal type for the OpenAI SDK
-    tier = cast(ServiceTier, service_tier)
 
     try:
         response = _call_with_retries(
@@ -435,7 +427,7 @@ Requirements:
                     },
                 ],
                 response_format={"type": "json_object"},
-                service_tier=tier,
+                service_tier=service_tier,
                 timeout=timeout,
             )
         )
@@ -445,6 +437,7 @@ Requirements:
         if content is None:
             raise ValueError("OpenAI API returned empty content for analysis")
         result = json.loads(content)
+        parsed = ContextResponse.model_validate(result)
 
         # Log token usage for cost tracking
         if log_token_usage and response.usage:
@@ -463,33 +456,17 @@ Requirements:
                 service_tier=service_tier,
             )
 
-        # Extract formality: use formality_recommendation for Finnish, formality_guidance for others
-        formality = result.get("formality_recommendation") or result.get(
-            "formality_guidance"
-        )
-
         console.print(
-            f"[green]Found {len(result.get('characters', {}))} characters, "
-            f"{len(result.get('places', {}))} places, "
-            f"{len(result.get('recurring_terms', {}))} recurring terms[/green]"
+            f"[green]Found {len(parsed.characters)} characters, "
+            f"{len(parsed.places)} places, "
+            f"{len(parsed.terms)} recurring terms[/green]"
         )
         console.print(
-            f"[green]Genre: {result.get('genre')}, Tone: {result.get('tone')}, "
-            f"Formality: {formality or 'N/A'}[/green]"
+            f"[green]Genre: {parsed.genre}, Tone: {parsed.tone}, "
+            f"Formality: {parsed.formality or 'N/A'}[/green]"
         )
 
-        return TranslationContext(
-            characters=result.get("characters", {}),
-            places=result.get("places", {}),
-            terms=result.get("recurring_terms", {}),
-            genre=result.get("genre", "unknown"),
-            tone=result.get("tone", "mixed"),
-            formality=formality,
-            style_notes=result.get("style_notes", ""),
-            domains=result.get("domains", []),
-            domain_glossaries=result.get("domain_glossaries", {}),
-            raw_json=result,
-        )
+        return parsed.to_translation_context(raw_json=result)
 
     except RateLimitError as e:
         console.print(
@@ -672,7 +649,7 @@ def translate_subtitles_batch(
     min_translation_difference: float = 0.8,
     movie_year: int | None = None,
     log_token_usage: bool = True,
-    service_tier: str = "flex",
+    service_tier: ServiceTier = "flex",
 ) -> pysrt.SubRipFile:
     """
     Second pass: Translate subtitles in batches using extracted context.
@@ -758,8 +735,6 @@ Third subtitle translation here"""
 
     # Determine timeout based on service tier (flex is slower, needs longer timeout)
     timeout = 900 if service_tier == "flex" else 60
-    # Cast service_tier to the correct Literal type for the OpenAI SDK
-    tier = cast(ServiceTier, service_tier)
 
     console.print(
         f"[blue]Pass 2: Translating {len(subs)} subtitles in {total_batches} batches...[/blue]"
@@ -801,7 +776,7 @@ Third subtitle translation here"""
                                 "content": f"{position_note}Translate to {target_lang}:\n\n{input_text}",
                             },
                         ],
-                        service_tier=tier,
+                        service_tier=service_tier,
                         timeout=timeout,
                     )
                 )

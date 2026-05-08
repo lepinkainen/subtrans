@@ -1,34 +1,19 @@
 """Type system for media items (movies, episodes)."""
 
-from typing import Union, TypeGuard
+from typing import TypeGuard, Union
 
-from .models import Movie, Episode
+from .models import Episode, MediaItem, Movie
 
-# Union type for all media types
+# Closed union of concrete media types. Use this when callers must dispatch on
+# the runtime variant; prefer the structural ``MediaItem`` protocol elsewhere.
 MediaType = Union[Movie, Episode]
 
 
-def is_movie(item: MediaType) -> TypeGuard[Movie]:
-    """
-    Type guard to check if a media item is a Movie.
-
-    Args:
-        item: Media item to check
-
-    Returns:
-        True if item is a Movie, False otherwise
-    """
+def is_movie(item: MediaItem | object) -> TypeGuard[Movie]:
+    """True if ``item`` is a concrete `Movie` instance."""
     return isinstance(item, Movie)
 
 
-def is_episode(item: MediaType) -> TypeGuard[Episode]:
-    """
-    Type guard to check if a media item is an Episode.
-
-    Args:
-        item: Media item to check
-
-    Returns:
-        True if item is an Episode, False otherwise
-    """
+def is_episode(item: MediaItem | object) -> TypeGuard[Episode]:
+    """True if ``item`` is a concrete `Episode` instance."""
     return isinstance(item, Episode)
