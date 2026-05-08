@@ -6,11 +6,12 @@ from pathlib import Path
 import pysrt
 
 from ..core.utils import console, CACHE_DIR
-from ..core.media_types import MediaType, is_movie, is_episode
+from ..core.media_types import is_episode, is_movie
+from ..core.models import MediaItem
 
 
 def check_translation_exists(
-    media: MediaType,
+    media: MediaItem,
     target_lang: str = "fi",
 ) -> tuple[bool, Path | None]:
     """
@@ -61,7 +62,7 @@ def check_translation_exists(
 
 def save_translated_subtitle(
     translated_subs: pysrt.SubRipFile,
-    media: MediaType,
+    media: MediaItem,
     mkv_path: Path | None = None,
     target_lang: str = "fi",
 ) -> Path:

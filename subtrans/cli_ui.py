@@ -6,10 +6,11 @@ from typing import cast
 
 from rich.table import Table
 
-from .core.models import Movie, Episode
+from .core.media_types import is_episode, is_movie
+from .core.models import Episode, Movie
 from .core.token_logger import get_detailed_token_stats, get_pricing_age_info
 from .core.utils import console
-from .selection import select_movies_fzf, select_episodes_fzf
+from .selection import select_episodes_fzf, select_movies_fzf
 
 
 def display_token_stats(movie_filter: str | None = None) -> None:
@@ -367,14 +368,14 @@ def select_by_pattern(
         # Build search strings based on media type
         search_strings = []
 
-        if isinstance(item, Movie):
+        if is_movie(item):
             # For movies: check title, display_title, and combined display
             search_strings.append(item.title.lower())
             search_strings.append(item.display_title.lower())
             search_strings.append(
                 f"{item.display_title} - {item.display_subtitle}".lower()
             )
-        elif isinstance(item, Episode):
+        elif is_episode(item):
             # For episodes: check series_name, episode_title, display_title, and combined display
             search_strings.append(item.series_name.lower())
             if item.episode_title:
@@ -404,7 +405,7 @@ def select_by_pattern(
         table.add_column("Missing", style="red")
 
         for item in matches:
-            if isinstance(item, Movie):
+            if is_movie(item):
                 table.add_row(
                     item.title,
                     str(item.year),
@@ -418,7 +419,7 @@ def select_by_pattern(
         table.add_column("Missing", style="red")
 
         for item in matches:
-            if isinstance(item, Episode):
+            if is_episode(item):
                 table.add_row(
                     item.series_name,
                     f"S{item.season_number:02d}E{item.episode_number:02d}",

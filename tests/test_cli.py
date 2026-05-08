@@ -1,14 +1,38 @@
 """Tests for CLI two-phase workflow."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+
+def _make_config(**overrides):
+    """Build a Config-shaped mock with the fields process_phase1 reads."""
+    from subtrans.core.models import Config
+
+    cfg = MagicMock(spec=Config)
+    cfg.source_language = "en"
+    cfg.target_language = "fi"
+    cfg.path_mappings = []
+    cfg.min_subtitle_count = 1
+    cfg.min_subtitle_file_size = 0
+    cfg.strict_validation = False
+    cfg.validate_subtitles = False
+    cfg.dry_run = False
+    cfg.skip_analysis = False
+    cfg.save_context = False
+    cfg.log_token_usage = False
+    cfg.analysis_model = "gpt-test"
+    cfg.analysis_service_tier = "auto"
+    cfg.interactive_track_selection = False
+    cfg.auto_select_tracks = True
+    for k, v in overrides.items():
+        setattr(cfg, k, v)
+    return cfg
 
 
 def test_extract_only_skips_translation(tmp_path):
     """Should skip translation when extract_only is True."""
-    from subtrans.workflows import process_movie_phase1
-    from subtrans.core.models import Movie, Config
+    from subtrans.core.models import Movie
+    from subtrans.workflows import process_phase1
 
-    # Create a test SRT file
     srt_path = tmp_path / "test.en.srt"
     srt_path.write_text(
         """1
@@ -18,7 +42,6 @@ Test subtitle
         encoding="utf-8",
     )
 
-    # Create test movie
     movie = Movie(
         radarr_id=1,
         title="Test Movie",
@@ -27,40 +50,22 @@ Test subtitle
         missing_subtitles=["fi"],
         existing_subtitles=[],
     )
+    config = _make_config()
 
-    # Create mock config with new fields
-    config = MagicMock(spec=Config)
-    config.interactive_track_selection = False
-    config.auto_select_tracks = True
-
-    # Mock the subtitle finding
     with patch("subtrans.workflows.get_source_subtitle") as mock_get_sub:
-        mock_get_sub.return_value = (
-            srt_path,
-            False,
-        )  # (path, skip_requested)
+        mock_get_sub.return_value = (srt_path, False)
 
-        # Call with extract_only=True (uses phase1)
-        result = process_movie_phase1(
-            movie,
-            client=None,  # No client needed for extract-only
-            config=config,
-            extract_only=True,
-            strict_validation=False,  # Disable validation prompts for test
-            min_subtitle_count=1,  # Accept test file with 1 entry
-        )
+        result = process_phase1(movie, client=None, config=config, extract_only=True)
 
-        # Should succeed without calling OpenAI
         assert result is True
         mock_get_sub.assert_called_once()
 
 
 def test_extract_only_loads_subtitle(tmp_path):
     """Should load subtitle file in extract-only mode."""
-    from subtrans.workflows import process_movie_phase1
-    from subtrans.core.models import Movie, Config
+    from subtrans.core.models import Movie
+    from subtrans.workflows import process_phase1
 
-    # Create a test SRT file with multiple entries
     srt_path = tmp_path / "test.en.srt"
     srt_path.write_text(
         """1
@@ -82,32 +87,20 @@ Second subtitle
         missing_subtitles=["fi"],
         existing_subtitles=[],
     )
-
-    # Create mock config
-    config = MagicMock(spec=Config)
-    config.interactive_track_selection = False
-    config.auto_select_tracks = True
+    config = _make_config()
 
     with patch("subtrans.workflows.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (srt_path, False)
 
-        result = process_movie_phase1(
-            movie,
-            client=None,
-            config=config,
-            extract_only=True,
-            strict_validation=False,  # Disable validation prompts for test
-            min_subtitle_count=1,  # Accept test file with 2 entries
-        )
+        result = process_phase1(movie, client=None, config=config, extract_only=True)
 
-        # Should successfully process
         assert result is True
 
 
 def test_extract_only_handles_missing_subtitle():
     """Should fail gracefully when subtitle not found in extract-only mode."""
-    from subtrans.workflows import process_movie_phase1
-    from subtrans.core.models import Movie, Config
+    from subtrans.core.models import Movie
+    from subtrans.workflows import process_phase1
 
     movie = Movie(
         radarr_id=1,
@@ -117,45 +110,30 @@ def test_extract_only_handles_missing_subtitle():
         missing_subtitles=["fi"],
         existing_subtitles=[],
     )
-
-    # Create mock config
-    config = MagicMock(spec=Config)
-    config.interactive_track_selection = False
-    config.auto_select_tracks = True
+    config = _make_config()
 
     with patch("subtrans.workflows.get_source_subtitle") as mock_get_sub:
-        mock_get_sub.return_value = (
-            None,
-            False,
-        )  # Subtitle not found, not skipped
+        mock_get_sub.return_value = (None, False)
 
-        result = process_movie_phase1(
-            movie,
-            client=None,
-            config=config,
-            extract_only=True,
-        )
+        result = process_phase1(movie, client=None, config=config, extract_only=True)
 
-        # Should return False when subtitle not found
         assert result is False
 
 
 def test_show_context_functionality():
-    """Test that context is always shown in phase1 (no show_context param)."""
-    from subtrans.workflows import process_movie_phase1
+    """Phase 1 always shows context: no opt-in flag in the signature."""
     import inspect
 
-    # Phase 1 always shows context - verify no show_context parameter
-    sig = inspect.signature(process_movie_phase1)
-    # show_context parameter should NOT exist in phase1
-    # (context is always shown in phase1)
+    from subtrans.workflows import process_phase1
+
+    sig = inspect.signature(process_phase1)
     assert "show_context" not in sig.parameters
 
 
 def test_normal_mode_requires_client():
-    """Should require OpenAI client when not in extract-only mode."""
-    from subtrans.workflows import process_movie_phase1
-    from subtrans.core.models import Movie, Config
+    """Dry run with missing subtitle returns False without needing a client."""
+    from subtrans.core.models import Movie
+    from subtrans.workflows import process_phase1
 
     movie = Movie(
         radarr_id=1,
@@ -165,27 +143,14 @@ def test_normal_mode_requires_client():
         missing_subtitles=["fi"],
         existing_subtitles=[],
     )
+    config = _make_config(dry_run=True)
 
-    # Create mock config
-    config = MagicMock(spec=Config)
-    config.interactive_track_selection = False
-    config.auto_select_tracks = True
-
-    # Normal mode (extract_only=False) would fail without proper client
-    # This is more of a contract test - actual translation requires OpenAI
-    # Just verify the parameter exists and defaults to False
     with patch("subtrans.workflows.get_source_subtitle") as mock_get_sub:
         mock_get_sub.return_value = (None, False)
 
-        result = process_movie_phase1(
-            movie,
-            client=None,
-            config=config,
-            extract_only=False,  # Explicitly False
-            dry_run=True,  # Use dry_run to avoid needing full setup
-        )
+        result = process_phase1(movie, client=None, config=config, extract_only=False)
 
-        assert result is False  # Fails due to missing subtitle
+        assert result is False
 
 
 def test_select_by_pattern_exact_movie_match():

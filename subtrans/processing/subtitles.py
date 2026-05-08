@@ -9,7 +9,7 @@ from rich.table import Table
 
 from ..core.cache import get_subtitle_cache_path
 from ..core.models import Config, SubtitleTrack
-from ..core.media_types import MediaType
+from ..core.models import MediaItem
 from ..core.utils import console
 
 
@@ -510,7 +510,7 @@ def prompt_track_selection(
 
 
 def get_source_subtitle(
-    media: MediaType,
+    media: MediaItem,
     config: Config,
     source_lang: str = "en",
     min_entries: int = 50,
