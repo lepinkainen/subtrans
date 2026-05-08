@@ -1,7 +1,11 @@
 """Data models for subtrans application."""
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
+
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+ServiceTier = Literal["auto", "default", "flex", "scale", "priority"]
 
 
 @runtime_checkable
@@ -24,8 +28,22 @@ class MediaItem(Protocol):
         ...
 
     @property
-    def cache_key(self) -> tuple[str, ...]:
-        """Unique tuple for cache lookups."""
+    def cache_key(self) -> tuple:
+        """Unique tuple for cache lookups (variant-specific shape)."""
+        ...
+
+    @property
+    def analyze_title(self) -> str:
+        """Title to feed to analysis prompts and token-logger labels.
+
+        Movies use the bare title; episodes use the full SxxExx display so the
+        per-episode log entries remain distinguishable.
+        """
+        ...
+
+    @property
+    def analyze_year(self) -> int:
+        """Year for token-logger / pricing context (movie year or series year)."""
         ...
 
     path: str  # Mutable path field (can be updated by path mapping)
@@ -63,6 +81,14 @@ class Movie:
     def cache_key(self) -> tuple[str, int]:
         """Unique cache key based on title and year."""
         return (self.title, self.year)
+
+    @property
+    def analyze_title(self) -> str:
+        return self.title
+
+    @property
+    def analyze_year(self) -> int:
+        return self.year
 
 
 @dataclass
@@ -105,6 +131,14 @@ class Episode:
         """Cache key for series-wide context (shared across all episodes)."""
         return (self.series_name, self.series_year)
 
+    @property
+    def analyze_title(self) -> str:
+        return self.display_title
+
+    @property
+    def analyze_year(self) -> int:
+        return self.series_year
+
 
 @dataclass
 class SubtitleTrack:
@@ -140,9 +174,13 @@ class Config:
     )
     min_translation_difference: float = 0.8  # Minimum difference ratio (0.0-1.0)
     log_token_usage: bool = True  # Log API token usage to file for cost tracking
-    # Service tier for OpenAI API pricing: "auto", "flex", "default", "priority"
-    analysis_service_tier: str = "auto"  # Standard pricing for Pass 1 (interactive)
-    translation_service_tier: str = "flex"  # Flex pricing for Pass 2 (50% discount)
+    # Service tier for OpenAI API pricing
+    analysis_service_tier: ServiceTier = (
+        "auto"  # Standard pricing for Pass 1 (interactive)
+    )
+    translation_service_tier: ServiceTier = (
+        "flex"  # Flex pricing for Pass 2 (50% discount)
+    )
     # Subtitle validation settings
     min_subtitle_count: int = 50  # Minimum entries for valid subtitle
     min_subtitle_file_size: int = 2048  # Minimum file size (2KB)
@@ -179,3 +217,47 @@ class TranslationContext:
     ]  # Specialized semantic domains (e.g., "police_intelligence", "medical")
     domain_glossaries: dict[str, dict[str, str]]  # Domain-specific terminology mappings
     raw_json: dict
+
+
+class ContextResponse(BaseModel):
+    """Pydantic schema for the JSON returned by the Pass-1 analysis prompt.
+
+    Lives at the OpenAI boundary; convert to ``TranslationContext`` (the
+    internal carrier) via ``to_translation_context``. Field-name drift between
+    the prompt and consumers becomes a hard error here, not silent defaults.
+    """
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    characters: dict[str, str] = Field(default_factory=dict)
+    places: dict[str, str] = Field(default_factory=dict)
+    terms: dict[str, str] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("terms", "recurring_terms"),
+    )
+    genre: str = "unknown"
+    tone: str = "mixed"
+    formality: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "formality", "formality_recommendation", "formality_guidance"
+        ),
+    )
+    style_notes: str = ""
+    domains: list[str] = Field(default_factory=list)
+    domain_glossaries: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+    def to_translation_context(self, raw_json: dict) -> TranslationContext:
+        """Build a `TranslationContext` from this validated payload."""
+        return TranslationContext(
+            characters=self.characters,
+            places=self.places,
+            terms=self.terms,
+            genre=self.genre,
+            tone=self.tone,
+            formality=self.formality,
+            style_notes=self.style_notes,
+            domains=self.domains,
+            domain_glossaries=self.domain_glossaries,
+            raw_json=raw_json,
+        )
