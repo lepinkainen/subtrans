@@ -1,6 +1,41 @@
 """Tests for integrations.bazarr module."""
 
 
+def _mock_httpx(monkeypatch, payloads_by_url=None, payload=None):
+    """Install a fake httpx.Client returning the given JSON payload.
+
+    ``payloads_by_url`` (optional) is a mapping of URL substring -> payload;
+    ``payload`` (optional) is used when no per-url match is desired.
+    """
+
+    class MockResponse:
+        def __init__(self, data):
+            self.data = data
+
+        def json(self):
+            return self.data
+
+        def raise_for_status(self):
+            pass
+
+    class MockClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, *args, **kwargs):
+            url = args[0] if args else ""
+            if payloads_by_url:
+                for needle, data in payloads_by_url.items():
+                    if needle in url:
+                        return MockResponse(data)
+            return MockResponse(payload)
+
+    monkeypatch.setattr("httpx.Client", lambda **kwargs: MockClient())
+
+
 def test_get_wanted_movies_includes_all_missing_target(monkeypatch):
     """Movies missing target subtitles should be included regardless of source."""
     from subtrans.integrations.bazarr import get_wanted_movies
@@ -337,3 +372,204 @@ def test_populate_episode_path_not_found(monkeypatch, capsys):
     # Changed: Now returns True even when path isn't found (not a fatal error)
     assert result is True
     assert episode.path == ""
+
+
+def test_get_wanted_movies_accepts_bare_list_response(monkeypatch):
+    """BazarrListResponse should lift a bare-list payload into the data field."""
+    from subtrans.integrations.bazarr import get_wanted_movies
+
+    bare_list = [
+        {
+            "title": "Bare List Movie",
+            "year": 2024,
+            "radarrId": 99,
+            "missing_subtitles": [{"code2": "fi"}],
+            "subtitles": [{"code2": "en"}],
+        }
+    ]
+    _mock_httpx(monkeypatch, payload=bare_list)
+
+    result = get_wanted_movies("http://test", "key", source_lang="en", target_lang="fi")
+
+    assert len(result) == 1
+    assert result[0].title == "Bare List Movie"
+
+
+def test_get_wanted_episodes_parses_sxe_string(monkeypatch):
+    """Wanted episodes should parse 'SxE' strings into season/episode ints."""
+    from subtrans.integrations.bazarr import get_wanted_episodes
+
+    payload = {
+        "data": [
+            {
+                "sonarrEpisodeId": 1,
+                "sonarrSeriesId": 10,
+                "seriesTitle": "Show",
+                "episodeTitle": "Pilot",
+                "episode_number": "2x15",
+                "missing_subtitles": [{"code2": "fi"}],
+                "subtitles": [{"code2": "en"}],
+            }
+        ]
+    }
+    _mock_httpx(monkeypatch, payload=payload)
+
+    result = get_wanted_episodes(
+        "http://test", "key", source_lang="en", target_lang="fi"
+    )
+
+    assert len(result) == 1
+    assert result[0].season_number == 2
+    assert result[0].episode_number == 15
+
+
+def test_get_wanted_episodes_handles_malformed_episode_number(monkeypatch, capsys):
+    """Malformed 'SxE' strings default to (0, 0) and log once per item."""
+    from subtrans.integrations.bazarr import get_wanted_episodes
+
+    payload = {
+        "data": [
+            {
+                "sonarrEpisodeId": 1,
+                "sonarrSeriesId": 10,
+                "seriesTitle": "Show",
+                "episodeTitle": "Pilot",
+                "episode_number": "garbage",
+                "missing_subtitles": [{"code2": "fi"}],
+                "subtitles": [{"code2": "en"}],
+            }
+        ]
+    }
+    _mock_httpx(monkeypatch, payload=payload)
+
+    result = get_wanted_episodes(
+        "http://test", "key", source_lang="en", target_lang="fi"
+    )
+
+    assert len(result) == 1
+    assert result[0].season_number == 0
+    assert result[0].episode_number == 0
+    captured = capsys.readouterr()
+    assert "garbage" in captured.out
+
+
+def test_populate_episode_paths_bulk_groups_by_series(monkeypatch):
+    """Bulk fetch should issue one HTTP call per unique series, not per episode."""
+    from subtrans.core.models import Episode
+    from subtrans.integrations.bazarr import populate_episode_paths_bulk
+
+    episodes = [
+        Episode(
+            sonarr_id=1,
+            series_name="Show A",
+            season_number=0,
+            episode_number=0,
+            episode_title="Pilot",
+            path="",
+            missing_subtitles=["fi"],
+            existing_subtitles=[],
+            series_year=0,
+            sonarr_series_id=100,
+        ),
+        Episode(
+            sonarr_id=2,
+            series_name="Show A",
+            season_number=0,
+            episode_number=0,
+            episode_title="Second",
+            path="",
+            missing_subtitles=["fi"],
+            existing_subtitles=[],
+            series_year=0,
+            sonarr_series_id=100,
+        ),
+        Episode(
+            sonarr_id=3,
+            series_name="Show B",
+            season_number=0,
+            episode_number=0,
+            episode_title="Other",
+            path="",
+            missing_subtitles=["fi"],
+            existing_subtitles=[],
+            series_year=0,
+            sonarr_series_id=200,
+        ),
+    ]
+
+    series_payloads = {
+        100: {
+            "data": [
+                {"sonarrEpisodeId": 1, "season": 1, "episode": 1, "path": "/A/1.mkv"},
+                {"sonarrEpisodeId": 2, "season": 1, "episode": 2, "path": "/A/2.mkv"},
+            ]
+        },
+        200: {
+            "data": [
+                {"sonarrEpisodeId": 3, "season": 1, "episode": 1, "path": "/B/1.mkv"},
+            ]
+        },
+    }
+    call_log: list[int] = []
+
+    class MockResponse:
+        def __init__(self, data):
+            self.data = data
+
+        def json(self):
+            return self.data
+
+        def raise_for_status(self):
+            pass
+
+    class MockClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get(self, url, headers=None, params=None):
+            series_id = params["seriesid[]"]
+            call_log.append(series_id)
+            return MockResponse(series_payloads[series_id])
+
+    monkeypatch.setattr("httpx.Client", lambda **kwargs: MockClient())
+
+    populate_episode_paths_bulk(episodes, "http://test", "key")
+
+    assert sorted(call_log) == [100, 200], (
+        "expected one HTTP call per unique series, not per episode"
+    )
+    assert episodes[0].path == "/A/1.mkv"
+    assert episodes[1].path == "/A/2.mkv"
+    assert episodes[2].path == "/B/1.mkv"
+
+
+def test_get_wanted_movies_skips_when_target_missing(monkeypatch):
+    """Movies whose missing_subtitles do not include target_lang are filtered out."""
+    from subtrans.integrations.bazarr import get_wanted_movies
+
+    payload = {
+        "data": [
+            {
+                "title": "Has Finnish Already",
+                "year": 2020,
+                "radarrId": 1,
+                "missing_subtitles": [{"code2": "de"}],
+                "subtitles": [{"code2": "en"}, {"code2": "fi"}],
+            },
+            {
+                "title": "Needs Finnish",
+                "year": 2020,
+                "radarrId": 2,
+                "missing_subtitles": [{"code2": "fi"}],
+                "subtitles": [{"code2": "en"}],
+            },
+        ]
+    }
+    _mock_httpx(monkeypatch, payload=payload)
+
+    result = get_wanted_movies("http://test", "key", source_lang="en", target_lang="fi")
+
+    assert [m.title for m in result] == ["Needs Finnish"]

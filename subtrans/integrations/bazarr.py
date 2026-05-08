@@ -1,90 +1,96 @@
 """Bazarr API integration for fetching movies and episodes with missing subtitles."""
 
 import sys
+from collections import defaultdict
 
 import httpx
 
-from ..core.models import Movie, Episode
+from ..core.models import Episode, Movie
 from ..core.utils import console
+from .bazarr_models import (
+    BazarrEpisodeDetail,
+    BazarrListResponse,
+    BazarrMovieDetail,
+    BazarrSubtitle,
+    BazarrWantedEpisode,
+    BazarrWantedMovie,
+)
+
+
+def _missing_lang_codes(missing: list[BazarrSubtitle]) -> list[str]:
+    """Flatten Bazarr subtitle records to a list of language code strings.
+
+    Prefers ``code2`` over ``code3``; empty if neither present. The match logic
+    in `_target_in_missing` tolerates either form.
+    """
+    return [s.code2 or s.code3 or "" for s in missing]
+
+
+def _target_in_missing(missing_codes: list[str], target_lang: str) -> bool:
+    """True if ``target_lang`` appears (exact or as prefix) in ``missing_codes``."""
+    return any(
+        code == target_lang or code.startswith(target_lang) for code in missing_codes
+    )
+
+
+def _subtitles_to_dicts(subs: list[BazarrSubtitle]) -> list[dict]:
+    """Serialize parsed BazarrSubtitle records back to plain dicts.
+
+    Internal ``Movie.existing_subtitles`` is typed ``list[dict]`` and consumed
+    by code that doesn't depend on a specific schema.
+    """
+    return [s.model_dump(exclude_none=True) for s in subs]
 
 
 def get_wanted_movies(
     base_url: str, api_key: str, source_lang: str = "en", target_lang: str = "fi"
 ) -> list[Movie]:
-    """
-    Fetch movies missing target language subtitles from Bazarr.
+    """Fetch movies missing target language subtitles from Bazarr.
 
     Returns all movies missing target language subtitles, regardless of whether
-    they have source language subtitles tracked in Bazarr. The actual source
-    subtitle check (including embedded MKV subtitles) happens during processing.
-
-    Args:
-        base_url: Bazarr server URL
-        api_key: Bazarr API key
-        source_lang: Source language code (ISO 639-1/2, default: "en")
-        target_lang: Target language code (ISO 639-1/2, default: "fi")
-
-    Returns:
-        List of Movie objects with missing target language subtitles
+    they have source language subtitles tracked in Bazarr. Source-subtitle
+    presence is rechecked during processing (embedded MKV tracks count too).
 
     Raises:
-        SystemExit: If API request fails
+        SystemExit: If API request fails.
     """
     headers = {"X-API-KEY": api_key}
-
-    # Get wanted movies (movies with missing subtitles)
     url = f"{base_url}/api/movies/wanted"
 
     try:
         with httpx.Client(timeout=30) as client:
             response = client.get(url, headers=headers)
             response.raise_for_status()
-            data = response.json()
+            payload = response.json()
     except httpx.HTTPError as e:
         console.print(f"[red]Error fetching wanted movies: {e}[/red]")
         sys.exit(1)
 
-    movies = []
-    for item in data.get("data", []):
-        # Check if target language is in the missing subtitles
-        missing = item.get("missing_subtitles", [])
-        missing_langs = [s.get("code2", s.get("code3", "")) for s in missing]
+    parsed = BazarrListResponse[BazarrWantedMovie].model_validate(payload)
 
-        # Check for both exact match and startswith (handles 2-letter and 3-letter codes)
-        if any(
-            lang == target_lang or lang.startswith(target_lang)
-            for lang in missing_langs
-        ):
-            # Note: We no longer filter out movies based on source language availability
-            # since many movies have embedded subtitles in MKV files that Bazarr doesn't track
-            # The source subtitle check will happen during movie processing
-
-            # Note: path and year will be empty/0 here, we'll fetch them before selection
-            movies.append(
-                Movie(
-                    radarr_id=item.get("radarrId"),
-                    title=item.get("title", "Unknown"),
-                    year=0,  # Will be populated before selection
-                    path="",  # Will be populated before selection
-                    missing_subtitles=missing_langs,
-                    existing_subtitles=item.get("subtitles", []),
-                )
+    movies: list[Movie] = []
+    for item in parsed.data:
+        missing_codes = _missing_lang_codes(item.missing_subtitles)
+        if not _target_in_missing(missing_codes, target_lang):
+            continue
+        movies.append(
+            Movie(
+                radarr_id=item.radarr_id,
+                title=item.title,
+                year=item.year,
+                path=item.path,
+                missing_subtitles=missing_codes,
+                existing_subtitles=_subtitles_to_dicts(item.subtitles),
             )
+        )
 
     return movies
 
 
 def populate_movie_path(movie: Movie, base_url: str, api_key: str) -> bool:
-    """
-    Fetch and populate the movie path from Bazarr API.
+    """Populate ``movie.path`` and ``movie.year`` from Bazarr's movie detail API.
 
-    Args:
-        movie: Movie object to populate path for
-        base_url: Bazarr server URL
-        api_key: Bazarr API key
-
-    Returns:
-        True if path was successfully populated, False otherwise
+    Returns True on success.
     """
     headers = {"X-API-KEY": api_key}
     url = f"{base_url}/api/movies"
@@ -95,206 +101,190 @@ def populate_movie_path(movie: Movie, base_url: str, api_key: str) -> bool:
                 url, headers=headers, params={"radarrid": movie.radarr_id}
             )
             response.raise_for_status()
-            data = response.json()
-
-            # The API returns a list or dict, find the matching movie
-            movies_list = []
-            if isinstance(data, dict) and "data" in data:
-                movies_list = data["data"]
-            elif isinstance(data, list):
-                movies_list = data
-
-            for item in movies_list:
-                if item.get("radarrId") == movie.radarr_id:
-                    movie.path = item.get("path", "")
-                    # Also populate year if it's missing (year=0)
-                    if movie.year == 0 and item.get("year"):
-                        movie.year = item.get("year")
-                    if movie.path:
-                        return True
-                    else:
-                        console.print(
-                            f"[yellow]Warning: No path found for '{movie.title}'[/yellow]"
-                        )
-                        return False
-
-            console.print(
-                f"[yellow]Warning: Movie not found in API response for '{movie.title}'[/yellow]"
+            parsed = BazarrListResponse[BazarrMovieDetail].model_validate(
+                response.json()
             )
-            return False
-
     except Exception as e:
         console.print(f"[red]Failed to get path for '{movie.title}': {e}[/red]")
         return False
+
+    for item in parsed.data:
+        if item.radarr_id != movie.radarr_id:
+            continue
+        movie.path = item.path
+        if movie.year == 0 and item.year:
+            movie.year = item.year
+        if movie.path:
+            return True
+        console.print(f"[yellow]Warning: No path found for '{movie.title}'[/yellow]")
+        return False
+
+    console.print(
+        f"[yellow]Warning: Movie not found in API response for '{movie.title}'[/yellow]"
+    )
+    return False
 
 
 def get_wanted_episodes(
     base_url: str, api_key: str, source_lang: str = "en", target_lang: str = "fi"
 ) -> list[Episode]:
-    """
-    Fetch episodes missing target language subtitles from Bazarr.
+    """Fetch episodes missing target language subtitles from Bazarr.
 
-    Returns all episodes missing target language subtitles, regardless of whether
-    they have source language subtitles tracked in Bazarr. The actual source
-    subtitle check (including embedded MKV subtitles) happens during processing.
-
-    Args:
-        base_url: Bazarr server URL
-        api_key: Bazarr API key
-        source_lang: Source language code (ISO 639-1/2, default: "en")
-        target_lang: Target language code (ISO 639-1/2, default: "fi")
-
-    Returns:
-        List of Episode objects with missing target language subtitles
+    Same source-subtitle policy as `get_wanted_movies`.
 
     Raises:
-        SystemExit: If API request fails
+        SystemExit: If API request fails.
     """
     headers = {"X-API-KEY": api_key}
-
-    # Get wanted episodes (episodes with missing subtitles)
     url = f"{base_url}/api/episodes/wanted"
 
     try:
         with httpx.Client(timeout=30) as client:
             response = client.get(url, headers=headers)
             response.raise_for_status()
-            data = response.json()
+            payload = response.json()
     except httpx.HTTPError as e:
         console.print(f"[red]Error fetching wanted episodes: {e}[/red]")
         sys.exit(1)
 
-    episodes = []
-    for item in data.get("data", []):
-        # Check if target language is in the missing subtitles
-        missing = item.get("missing_subtitles", [])
-        missing_langs = [s.get("code2", s.get("code3", "")) for s in missing]
+    parsed = BazarrListResponse[BazarrWantedEpisode].model_validate(payload)
 
-        # Check for both exact match and startswith (handles 2-letter and 3-letter codes)
-        if any(
-            lang == target_lang or lang.startswith(target_lang)
-            for lang in missing_langs
-        ):
-            # Note: We no longer filter out episodes based on source language availability
-            # since many episodes have embedded subtitles in MKV files that Bazarr doesn't track
-            # The source subtitle check will happen during episode processing
-
-            # Parse episode_number which is in "SxE" format (e.g., "1x1", "2x15")
-            episode_num_str = item.get("episode_number", "0x0")
-            season_num = 0
-            ep_num = 0
-            if "x" in episode_num_str:
-                parts = episode_num_str.split("x", 1)
-                try:
-                    season_num = int(parts[0])
-                    ep_num = int(parts[1])
-                except (ValueError, IndexError):
-                    pass
-
-            # Try to get path and year from wanted API response if available
-            # If not available, they'll be populated after user selection via populate_episode_path
-            episodes.append(
-                Episode(
-                    sonarr_id=item.get("sonarrEpisodeId", 0),
-                    series_name=item.get("seriesTitle", "Unknown"),
-                    season_number=season_num,
-                    episode_number=ep_num,
-                    episode_title=item.get("episodeTitle", ""),
-                    path=item.get("path", ""),  # Try to get path from wanted API
-                    missing_subtitles=missing_langs,
-                    existing_subtitles=item.get("subtitles", []),
-                    series_year=item.get("year", 0),  # Try to get year from wanted API
-                    sonarr_series_id=item.get(
-                        "sonarrSeriesId", 0
-                    ),  # Store series ID for API lookups
-                )
+    episodes: list[Episode] = []
+    for item in parsed.data:
+        missing_codes = _missing_lang_codes(item.missing_subtitles)
+        if not _target_in_missing(missing_codes, target_lang):
+            continue
+        season, ep = item.season_episode
+        episodes.append(
+            Episode(
+                sonarr_id=item.sonarr_id,
+                series_name=item.series_title,
+                season_number=season,
+                episode_number=ep,
+                episode_title=item.episode_title,
+                path=item.path,
+                missing_subtitles=missing_codes,
+                existing_subtitles=_subtitles_to_dicts(item.subtitles),
+                series_year=item.year,
+                sonarr_series_id=item.sonarr_series_id,
             )
+        )
 
     return episodes
 
 
-def populate_episode_path(episode: Episode, base_url: str, api_key: str) -> bool:
+def _fetch_episode_details_for_series(
+    series_id: int, base_url: str, api_key: str
+) -> list[BazarrEpisodeDetail]:
+    """Fetch all episode details for a single Sonarr series ID.
+
+    Bazarr requires the ``seriesid[]`` bracket syntax.
     """
-    Fetch and populate the episode path from Bazarr API.
-
-    Uses the series ID to query for all episodes in the series, then finds
-    the matching episode by sonarrEpisodeId.
-
-    Args:
-        episode: Episode object to populate path for
-        base_url: Bazarr server URL
-        api_key: Bazarr API key
-
-    Returns:
-        True if path was successfully populated, False otherwise
-    """
-    headers = {"X-API-KEY": api_key}
-
-    # Query episodes by series ID using correct bracket notation
-    # Bazarr API requires seriesid[] parameter format
     url = f"{base_url}/api/episodes"
+    headers = {"X-API-KEY": api_key}
+    with httpx.Client(timeout=30) as client:
+        response = client.get(url, headers=headers, params={"seriesid[]": series_id})
+        response.raise_for_status()
+        payload = response.json()
+    return BazarrListResponse[BazarrEpisodeDetail].model_validate(payload).data
 
+
+def _apply_episode_detail(episode: Episode, detail: BazarrEpisodeDetail) -> bool:
+    """Copy fields from a BazarrEpisodeDetail into an Episode in-place.
+
+    Returns True if a real path was populated.
+    """
+    episode.path = detail.path
+    if detail.season:
+        episode.season_number = detail.season
+    if detail.episode:
+        episode.episode_number = detail.episode
+    return bool(episode.path)
+
+
+def populate_episode_path(episode: Episode, base_url: str, api_key: str) -> bool:
+    """Populate a single episode via its series detail call.
+
+    Kept for backwards compatibility with callers that operate one-at-a-time;
+    bulk callers should prefer ``populate_episode_paths_bulk``.
+    """
     try:
-        with httpx.Client(timeout=30) as client:
-            # Use seriesid[] parameter to get all episodes for this series
-            params = {"seriesid[]": episode.sonarr_series_id}
-            response = client.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            data = response.json()
-
-            # The API returns {"data": [...]} structure
-            episodes_list = []
-            if isinstance(data, dict) and "data" in data:
-                episodes_list = data["data"]
-            elif isinstance(data, list):
-                episodes_list = data
-
-            for item in episodes_list:
-                if item.get("sonarrEpisodeId") == episode.sonarr_id:
-                    episode.path = item.get("path", "")
-                    # Update season/episode numbers from the detailed API response
-                    # (the wanted API returns "1x1" format which we parse, but this is authoritative)
-                    if item.get("season"):
-                        episode.season_number = item.get("season")
-                    if item.get("episode"):
-                        episode.episode_number = item.get("episode")
-                    if episode.path:
-                        return True
-                    else:
-                        console.print(
-                            f"[yellow]Warning: No path found for '{episode.display_title}'[/yellow]"
-                        )
-                        return False
-
-            # If we got here, episode wasn't found in the list
-            # This is expected for wanted episodes - they might not be in the main episodes list
-            console.print(
-                f"[yellow]Warning: Episode path not available from Bazarr API for '{episode.display_title}'[/yellow]"
-            )
-            console.print(
-                "[dim]  Suggestion: Run 'Update all' or 'Full sync' in Bazarr to refresh episode data[/dim]"
-            )
-            return True  # Not having a path isn't a fatal error - processing will handle it
-
+        details = _fetch_episode_details_for_series(
+            episode.sonarr_series_id, base_url, api_key
+        )
     except Exception as e:
         console.print(
-            f"[yellow]Warning: Could not fetch episode details for '{episode.display_title}': {e}[/yellow]"
+            f"[yellow]Warning: Could not fetch episode details for "
+            f"'{episode.display_title}': {e}[/yellow]"
         )
-        # Return True to continue processing - we'll try to find subtitles anyway
         return True
+
+    for detail in details:
+        if detail.sonarr_id != episode.sonarr_id:
+            continue
+        if _apply_episode_detail(episode, detail):
+            return True
+        console.print(
+            f"[yellow]Warning: No path found for '{episode.display_title}'[/yellow]"
+        )
+        return False
+
+    console.print(
+        f"[yellow]Warning: Episode path not available from Bazarr API for "
+        f"'{episode.display_title}'[/yellow]"
+    )
+    console.print(
+        "[dim]  Suggestion: Run 'Update all' or 'Full sync' in Bazarr to refresh "
+        "episode data[/dim]"
+    )
+    return True
+
+
+def populate_episode_paths_bulk(
+    episodes: list[Episode], base_url: str, api_key: str
+) -> None:
+    """Populate paths for many episodes with one HTTP call per series.
+
+    Bazarr's ``/api/episodes?seriesid[]=N`` returns every episode for the
+    series, so per-episode iteration is wasteful when many episodes from the
+    same series are selected.
+    """
+    by_series: dict[int, list[Episode]] = defaultdict(list)
+    for ep in episodes:
+        by_series[ep.sonarr_series_id].append(ep)
+
+    for series_id, group in by_series.items():
+        try:
+            details = _fetch_episode_details_for_series(series_id, base_url, api_key)
+        except Exception as e:
+            for ep in group:
+                console.print(
+                    f"[yellow]Warning: Could not fetch episode details for "
+                    f"'{ep.display_title}': {e}[/yellow]"
+                )
+            continue
+
+        details_by_id = {d.sonarr_id: d for d in details}
+        for ep in group:
+            detail = details_by_id.get(ep.sonarr_id)
+            if detail is None:
+                console.print(
+                    f"[yellow]Warning: Episode path not available from Bazarr API "
+                    f"for '{ep.display_title}'[/yellow]"
+                )
+                console.print(
+                    "[dim]  Suggestion: Run 'Update all' or 'Full sync' in Bazarr to "
+                    "refresh episode data[/dim]"
+                )
+                continue
+            if not _apply_episode_detail(ep, detail):
+                console.print(
+                    f"[yellow]Warning: No path found for '{ep.display_title}'[/yellow]"
+                )
 
 
 def apply_path_mapping(path: str, path_mappings: list[tuple[str, str]]) -> str:
-    """
-    Apply path mappings to translate NAS paths to local mount points.
-
-    Args:
-        path: Original path from Bazarr
-        path_mappings: List of (from_path, to_path) tuples
-
-    Returns:
-        Mapped path or original path if no mapping matches
-    """
+    """Translate a NAS path to its local mount via the first matching prefix."""
     if not path_mappings:
         return path
 
