@@ -20,7 +20,7 @@ subtrans = "subtrans.cli:main"
 [project.optional-dependencies]
 dev = [
     "mypy>=1.13.0",
-    "pytest>=8.0.0",
+    "pytest>=9.0.3",
     "pytest-cov>=4.1.0",
     "ruff>=0.6.9",
 ]
@@ -42,7 +42,7 @@ package = true
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.1",
+    "pytest>=9.0.3",
     "pytest-cov>=7.0.0",
     "types-pyyaml>=6.0.12.20250915",
 ]
