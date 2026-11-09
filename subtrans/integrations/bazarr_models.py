@@ -4,8 +4,6 @@ These models live at the network boundary. Internal `Movie` / `Episode`
 dataclasses (in `core.models`) are populated from these after validation.
 """
 
-from typing import Generic, TypeVar
-
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..core.utils import console
@@ -94,10 +92,7 @@ class BazarrEpisodeDetail(BaseModel):
     path: str = ""
 
 
-T = TypeVar("T", bound=BaseModel)
-
-
-class BazarrListResponse(BaseModel, Generic[T]):
+class BazarrListResponse[T: BaseModel](BaseModel):
     """Wrapper accepting either ``{"data": [...]}`` or bare-list responses."""
 
     data: list[T] = Field(default_factory=list)

@@ -39,8 +39,9 @@ path_mappings:
 
 def test_load_config_missing_file():
     """Should exit on missing config file."""
-    from subtrans.core.config import load_config
     import pytest
+
+    from subtrans.core.config import load_config
 
     with pytest.raises(SystemExit):
         load_config(Path("/nonexistent/config.yml"))

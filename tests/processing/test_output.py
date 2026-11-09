@@ -6,13 +6,14 @@ from pathlib import Path
 # Add the project root to path to allow imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from subtrans.core.models import Movie, Episode
+from subtrans.core.models import Episode, Movie
 
 
 def test_save_translated_subtitle_simple_filename(tmp_path):
     """Should correctly name output file for simple filename."""
-    from subtrans.processing.output import save_translated_subtitle
     import pysrt
+
+    from subtrans.processing.output import save_translated_subtitle
 
     # Create a dummy MKV file
     mkv = tmp_path / "movie.mkv"
@@ -47,8 +48,9 @@ def test_save_translated_subtitle_simple_filename(tmp_path):
 
 def test_save_translated_subtitle_multiple_dots(tmp_path):
     """Should correctly name output file for filename with multiple dots."""
-    from subtrans.processing.output import save_translated_subtitle
     import pysrt
+
+    from subtrans.processing.output import save_translated_subtitle
 
     # Create a dummy MKV file with multiple dots
     mkv = tmp_path / "Movie [1080p][x264].mkv"
@@ -83,8 +85,9 @@ def test_save_translated_subtitle_multiple_dots(tmp_path):
 
 def test_save_translated_subtitle_complex_real_world(tmp_path):
     """Should correctly name output file for complex real-world filename."""
-    from subtrans.processing.output import save_translated_subtitle
     import pysrt
+
+    from subtrans.processing.output import save_translated_subtitle
 
     # Create a dummy MKV file with complex real-world naming
     mkv = (
@@ -126,8 +129,9 @@ def test_save_translated_subtitle_complex_real_world(tmp_path):
 
 def test_save_translated_subtitle_with_directory_path(tmp_path):
     """Should correctly name output file when movie_path is a file."""
-    from subtrans.processing.output import save_translated_subtitle
     import pysrt
+
+    from subtrans.processing.output import save_translated_subtitle
 
     # Create a subdirectory
     movie_dir = tmp_path / "movies"
@@ -166,8 +170,9 @@ def test_save_translated_subtitle_with_directory_path(tmp_path):
 
 def test_save_translated_subtitle_find_video_in_directory(tmp_path):
     """Should find video file in directory and use it for naming."""
-    from subtrans.processing.output import save_translated_subtitle
     import pysrt
+
+    from subtrans.processing.output import save_translated_subtitle
 
     # Create video files in directory
     (tmp_path / "movie.mkv").touch()
@@ -204,9 +209,10 @@ def test_save_translated_subtitle_fallback_to_cache_on_permission_error(
     tmp_path, monkeypatch
 ):
     """Should fallback to cache directory when write fails."""
-    from subtrans.processing.output import save_translated_subtitle
-    from subtrans.core.utils import CACHE_DIR
     import pysrt
+
+    from subtrans.core.utils import CACHE_DIR
+    from subtrans.processing.output import save_translated_subtitle
 
     # Create a dummy MKV file
     mkv = tmp_path / "movie.mkv"
@@ -258,8 +264,9 @@ def test_save_translated_subtitle_fallback_to_cache_on_permission_error(
 
 def test_save_translated_subtitle_episode_simple(tmp_path):
     """Should correctly name output file for episode with simple filename."""
-    from subtrans.processing.output import save_translated_subtitle
     import pysrt
+
+    from subtrans.processing.output import save_translated_subtitle
 
     # Create a dummy MKV file
     mkv = tmp_path / "Breaking.Bad.S01E01.mkv"
@@ -297,8 +304,9 @@ def test_save_translated_subtitle_episode_simple(tmp_path):
 
 def test_save_translated_subtitle_episode_with_special_chars(tmp_path):
     """Should preserve original filename with special characters."""
-    from subtrans.processing.output import save_translated_subtitle
     import pysrt
+
+    from subtrans.processing.output import save_translated_subtitle
 
     # Create a dummy MKV file with special characters (real-world naming)
     mkv = (
@@ -343,8 +351,9 @@ def test_save_translated_subtitle_episode_with_special_chars(tmp_path):
 
 def test_save_translated_subtitle_episode_complex_real_world(tmp_path):
     """Should preserve complex real-world episode filename exactly."""
-    from subtrans.processing.output import save_translated_subtitle
     import pysrt
+
+    from subtrans.processing.output import save_translated_subtitle
 
     # Create a dummy MKV file with complex real-world naming
     mkv = (
@@ -389,9 +398,10 @@ def test_save_translated_subtitle_episode_complex_real_world(tmp_path):
 
 def test_save_translated_subtitle_episode_fallback_to_cache(tmp_path, monkeypatch):
     """Should fallback to cache directory for episode when write fails."""
-    from subtrans.processing.output import save_translated_subtitle
-    from subtrans.core.utils import CACHE_DIR
     import pysrt
+
+    from subtrans.core.utils import CACHE_DIR
+    from subtrans.processing.output import save_translated_subtitle
 
     # Create a dummy MKV file
     mkv = tmp_path / "episode.mkv"
@@ -478,8 +488,8 @@ def test_check_translation_exists_episode(tmp_path):
 
 def test_check_translation_exists_episode_in_cache(tmp_path):
     """Should find episode translation in cache directory."""
-    from subtrans.processing.output import check_translation_exists
     from subtrans.core.utils import CACHE_DIR
+    from subtrans.processing.output import check_translation_exists
 
     # Create mock episode
     episode = Episode(

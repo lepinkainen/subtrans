@@ -1,7 +1,8 @@
 """Tests for core.cache module."""
 
 from pathlib import Path
-from subtrans.core.models import TranslationContext, Movie, Episode
+
+from subtrans.core.models import Episode, Movie, TranslationContext
 
 
 def test_subtitle_cache_path_deterministic():
@@ -76,7 +77,7 @@ def test_context_cache_path_spaces_to_underscores():
 
 def test_save_and_load_context_roundtrip(tmp_path, monkeypatch):
     """Saved context should be loadable."""
-    from subtrans.core.cache import save_context_cache, load_cached_context
+    from subtrans.core.cache import load_cached_context, save_context_cache
 
     # Use tmp_path as cache dir
     monkeypatch.setattr("subtrans.core.cache.CACHE_DIR", tmp_path)
@@ -161,7 +162,7 @@ def test_load_cached_context_missing(tmp_path, monkeypatch):
 
 def test_load_cached_context_invalid_json(tmp_path, monkeypatch):
     """Loading invalid JSON should return None."""
-    from subtrans.core.cache import load_cached_context, get_context_cache_path
+    from subtrans.core.cache import get_context_cache_path, load_cached_context
 
     monkeypatch.setattr("subtrans.core.cache.CACHE_DIR", tmp_path)
 
@@ -233,7 +234,7 @@ def test_context_cache_path_episode_special_chars():
 
 def test_save_and_load_context_episode_roundtrip(tmp_path, monkeypatch):
     """Saved episode context should be loadable."""
-    from subtrans.core.cache import save_context_cache, load_cached_context
+    from subtrans.core.cache import load_cached_context, save_context_cache
 
     monkeypatch.setattr("subtrans.core.cache.CACHE_DIR", tmp_path)
 

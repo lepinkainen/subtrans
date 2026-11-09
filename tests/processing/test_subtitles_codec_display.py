@@ -3,8 +3,8 @@
 
 def test_display_subtitle_tracks_subrip_srt_format(capsys):
     """Should recognize SubRip/SRT codec as supported (not mark as unsupported)."""
-    from subtrans.processing.subtitles import display_subtitle_tracks
     from subtrans.core.models import SubtitleTrack
+    from subtrans.processing.subtitles import display_subtitle_tracks
 
     # Create tracks with different codec formats, including SubRip/SRT
     tracks = [
@@ -59,8 +59,8 @@ def test_display_subtitle_tracks_subrip_srt_format(capsys):
 
 def test_display_subtitle_tracks_s_text_utf8_format(capsys):
     """Should recognize S_TEXT/UTF8 codec as supported."""
-    from subtrans.processing.subtitles import display_subtitle_tracks
     from subtrans.core.models import SubtitleTrack
+    from subtrans.processing.subtitles import display_subtitle_tracks
 
     # Create tracks with S_TEXT/UTF8 format
     tracks = [

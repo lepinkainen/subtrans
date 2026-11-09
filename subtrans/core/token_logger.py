@@ -1,14 +1,13 @@
 """Token usage logging for cost tracking."""
 
 import json
-from datetime import datetime, date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from .utils import CACHE_DIR, console
-
 
 # Token usage log file location
 TOKEN_LOG_FILE = CACHE_DIR / "token_usage.jsonl"

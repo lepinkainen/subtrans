@@ -11,20 +11,20 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from subtrans.core.models import TranslationContext
 from subtrans.processing.translator import (
-    analyze_subtitles,
-    translate_subtitles_batch,
     _calculate_text_similarity,
-    _validate_translation_quality,
+    _is_likely_separator,
     _is_valid_translation_content,
     _parse_translation_response,
-    _is_likely_separator,
+    _validate_translation_quality,
+    analyze_subtitles,
+    translate_subtitles_batch,
 )
 
 
 def test_analyze_subtitles_quota_error_exits_gracefully(monkeypatch):
     """Test that quota errors in analysis phase exit gracefully."""
-    from openai import RateLimitError
     import pysrt
+    from openai import RateLimitError
 
     monkeypatch.setattr("subtrans.processing.translator._sleep", lambda *_: None)
 
@@ -51,8 +51,8 @@ def test_analyze_subtitles_quota_error_exits_gracefully(monkeypatch):
 
 def test_translate_subtitles_batch_quota_error_exits_gracefully(monkeypatch):
     """Test that quota errors in translation phase exit gracefully."""
-    from openai import RateLimitError
     import pysrt
+    from openai import RateLimitError
 
     monkeypatch.setattr("subtrans.processing.translator._sleep", lambda *_: None)
 
@@ -224,7 +224,7 @@ def test_validate_translation_quality_partial_translation():
     """Test validation with partially translated text."""
     original = "Hello, how are you today?"
     translated = "Hello, mitä kuuluu today?"  # Mix of English and Finnish
-    is_valid, difference = _validate_translation_quality(
+    is_valid, _difference = _validate_translation_quality(
         original, translated, min_difference=0.8
     )
     # Should fail validation as it's too similar
@@ -623,8 +623,9 @@ class TestBatchETA:
 
     def test_eta_shown_for_non_final_batch(self, monkeypatch):
         """Test that ETA is displayed for non-final batches."""
-        import pysrt
         from unittest.mock import MagicMock
+
+        import pysrt
 
         monkeypatch.setattr("subtrans.processing.translator._sleep", lambda *_: None)
 
@@ -780,8 +781,9 @@ class TestBatchETA:
 
     def test_eta_time_format(self, monkeypatch):
         """Test that ETA time is formatted correctly."""
-        import pysrt
         import re
+
+        import pysrt
 
         monkeypatch.setattr("subtrans.processing.translator._sleep", lambda *_: None)
 

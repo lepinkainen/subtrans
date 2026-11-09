@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pysrt
 
-from ..core.utils import console, CACHE_DIR
 from ..core.media_types import is_episode, is_movie
 from ..core.models import MediaItem
+from ..core.utils import CACHE_DIR, console
 
 
 def check_translation_exists(

@@ -1,6 +1,7 @@
 """Shared utilities and constants."""
 
 from pathlib import Path
+
 from rich.console import Console
 
 # Global console instance for formatted output

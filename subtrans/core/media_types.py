@@ -1,12 +1,12 @@
 """Type system for media items (movies, episodes)."""
 
-from typing import TypeGuard, Union
+from typing import TypeGuard
 
 from .models import Episode, MediaItem, Movie
 
 # Closed union of concrete media types. Use this when callers must dispatch on
 # the runtime variant; prefer the structural ``MediaItem`` protocol elsewhere.
-MediaType = Union[Movie, Episode]
+type MediaType = Movie | Episode
 
 
 def is_movie(item: MediaItem | object) -> TypeGuard[Movie]:

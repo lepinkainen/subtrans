@@ -8,8 +8,7 @@ import pysrt
 from rich.table import Table
 
 from ..core.cache import get_subtitle_cache_path
-from ..core.models import Config, SubtitleTrack
-from ..core.models import MediaItem
+from ..core.models import Config, MediaItem, SubtitleTrack
 from ..core.utils import console
 
 
@@ -236,8 +235,10 @@ def validate_subtitle_file(
         return (
             False,
             0,
-            f"{context} is too small ({file_size} bytes, minimum {min_file_size} bytes). "
-            "File may be corrupted or incomplete.",
+            (
+                f"{context} is too small ({file_size} bytes, minimum {min_file_size} bytes). "
+                "File may be corrupted or incomplete."
+            ),
         )
 
     # Parse and count subtitle entries
@@ -263,9 +264,11 @@ def validate_subtitle_file(
         return (
             False,
             entry_count,
-            f"{context} has only {entry_count} entries (minimum {min_entries} expected). "
-            "This seems suspiciously low for a typical movie. "
-            "File may be corrupted, incomplete, or from a very short video.",
+            (
+                f"{context} has only {entry_count} entries (minimum {min_entries} expected). "
+                "This seems suspiciously low for a typical movie. "
+                "File may be corrupted, incomplete, or from a very short video."
+            ),
         )
 
     # All checks passed
@@ -469,7 +472,7 @@ def prompt_track_selection(
     while True:
         try:
             response = input("> ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError, KeyboardInterrupt:
             console.print("[yellow]\nSkipping movie[/yellow]")
             return None, True
 
@@ -544,7 +547,7 @@ def get_source_subtitle(
             and not config.auto_select_tracks
             and not skip_interactive
         ):
-            entry_count, file_size = display_external_srt(external_srt)
+            entry_count, _file_size = display_external_srt(external_srt)
 
             console.print()
             console.print("Continue with this subtitle? [Y/n/mkv]")
@@ -556,7 +559,7 @@ def get_source_subtitle(
             while True:
                 try:
                     response = input("> ").strip().lower()
-                except (EOFError, KeyboardInterrupt):
+                except EOFError, KeyboardInterrupt:
                     console.print("[yellow]\nSkipping movie[/yellow]")
                     return None, True
 
