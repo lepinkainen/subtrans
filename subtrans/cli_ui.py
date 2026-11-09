@@ -209,7 +209,7 @@ def select_movies_legacy(movies: list[Movie], target_lang: str = "fi") -> list[M
     try:
         indices = [int(x.strip()) - 1 for x in selection.split(",")]
         return [movies[i] for i in indices if 0 <= i < len(movies)]
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         console.print("[red]Invalid selection[/red]")
         return []
 
@@ -312,7 +312,7 @@ def select_episodes_legacy(
             if selected_indices:
                 return [episodes[i] for i in selected_indices]
 
-        except (EOFError, KeyboardInterrupt):
+        except EOFError, KeyboardInterrupt:
             console.print("\n[yellow]Selection cancelled.[/yellow]")
             return []
 

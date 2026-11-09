@@ -3,8 +3,8 @@
 
 # Metadata
 metadata:
-  last_updated: "2025-12-07"  # YYYY-MM-DD format
-  source: "https://platform.openai.com/pricing"
+  last_updated: "2026-11-09"  # YYYY-MM-DD format
+  source: "https://developers.openai.com/api/docs/pricing"
 
 # Pricing structure:
 # Each model can have different pricing tiers based on service_tier:
@@ -14,6 +14,238 @@ metadata:
 # - priority: Priority tier (faster, more expensive)
 
 models:
+  # GPT-6 Series (short-context rates, <=272K input)
+  gpt-6-astra:
+    batch:
+      input: 5.0
+      cached_input: 0.5
+      output: 25.0
+    flex:
+      input: 5.0
+      cached_input: 0.5
+      output: 25.0
+    standard:
+      input: 10.0
+      cached_input: 1.0
+      output: 50.0
+    priority:
+      input: 20.0
+      cached_input: 2.0
+      output: 100.0
+
+  gpt-6.1-sol:
+    batch:
+      input: 1.0
+      cached_input: 0.05
+      output: 5.0
+    flex:
+      input: 1.0
+      cached_input: 0.05
+      output: 5.0
+    standard:
+      input: 2.0
+      cached_input: 0.1
+      output: 10.0
+    priority:
+      input: 4.0
+      cached_input: 0.2
+      output: 20.0
+
+  gpt-6.1-terra:
+    batch:
+      input: 0.5
+      cached_input: 0.025
+      output: 2.5
+    flex:
+      input: 0.5
+      cached_input: 0.025
+      output: 2.5
+    standard:
+      input: 1.0
+      cached_input: 0.05
+      output: 5.0
+    priority:
+      input: 2.0
+      cached_input: 0.1
+      output: 10.0
+
+  gpt-6-sol:
+    batch:
+      input: 1.0
+      cached_input: 0.1
+      output: 5.0
+    flex:
+      input: 1.0
+      cached_input: 0.1
+      output: 5.0
+    standard:
+      input: 2.0
+      cached_input: 0.2
+      output: 10.0
+    priority:
+      input: 4.0
+      cached_input: 0.4
+      output: 20.0
+
+  gpt-6-luna:
+    batch:
+      input: 0.05
+      cached_input: 0.005
+      output: 0.25
+    flex:
+      input: 0.05
+      cached_input: 0.005
+      output: 0.25
+    standard:
+      input: 0.1
+      cached_input: 0.01
+      output: 0.5
+    priority:
+      input: 0.2
+      cached_input: 0.02
+      output: 1.0
+
+  # GPT-5.x Series
+  gpt-5.6-sol:
+    batch:
+      input: 2.0
+      cached_input: 0.2
+      output: 10.0
+    flex:
+      input: 2.0
+      cached_input: 0.2
+      output: 10.0
+    standard:
+      input: 4.0
+      cached_input: 0.4
+      output: 20.0
+    priority:
+      input: 8.0
+      cached_input: 0.8
+      output: 40.0
+
+  gpt-5.6-terra:
+    batch:
+      input: 1.0
+      cached_input: 0.1
+      output: 6.0
+    flex:
+      input: 1.0
+      cached_input: 0.1
+      output: 6.0
+    standard:
+      input: 2.0
+      cached_input: 0.2
+      output: 12.0
+    priority:
+      input: 4.0
+      cached_input: 0.4
+      output: 24.0
+
+  gpt-5.6-luna:
+    batch:
+      input: 0.1
+      cached_input: 0.01
+      output: 0.6
+    flex:
+      input: 0.1
+      cached_input: 0.01
+      output: 0.6
+    standard:
+      input: 0.2
+      cached_input: 0.02
+      output: 1.2
+    priority:
+      input: 0.4
+      cached_input: 0.04
+      output: 2.4
+
+  gpt-5.5:
+    batch:
+      input: 2.5
+      cached_input: 0.25
+      output: 15.0
+    flex:
+      input: 2.5
+      cached_input: 0.25
+      output: 15.0
+    standard:
+      input: 5.0
+      cached_input: 0.5
+      output: 30.0
+    priority:
+      input: 12.5
+      cached_input: 1.25
+      output: 75.0
+
+  gpt-5.4:
+    batch:
+      input: 1.25
+      cached_input: 0.125
+      output: 7.5
+    flex:
+      input: 1.25
+      cached_input: 0.125
+      output: 7.5
+    standard:
+      input: 2.5
+      cached_input: 0.25
+      output: 15.0
+    priority:
+      input: 5.0
+      cached_input: 0.5
+      output: 30.0
+
+  gpt-5.4-mini:
+    batch:
+      input: 0.375
+      cached_input: 0.0375
+      output: 2.25
+    flex:
+      input: 0.375
+      cached_input: 0.0375
+      output: 2.25
+    standard:
+      input: 0.75
+      cached_input: 0.075
+      output: 4.5
+    priority:
+      input: 1.5
+      cached_input: 0.15
+      output: 9.0
+
+  gpt-5.4-nano:
+    batch:
+      input: 0.1
+      cached_input: 0.01
+      output: 0.625
+    flex:
+      input: 0.1
+      cached_input: 0.01
+      output: 0.625
+    standard:
+      input: 0.2
+      cached_input: 0.02
+      output: 1.25
+
+  gpt-5.2:
+    batch:
+      input: 0.875
+      cached_input: 0.0875
+      output: 7.0
+    flex:
+      input: 0.875
+      cached_input: 0.0875
+      output: 7.0
+    standard:
+      input: 1.75
+      cached_input: 0.175
+      output: 14.0
+    priority:
+      input: 3.5
+      cached_input: 0.35
+      output: 28.0
+
   # GPT-5 Series
   gpt-5:
     batch:
@@ -235,7 +467,7 @@ service_tier_aliases:
   auto: standard
   default: standard
 
-# Fallback pricing for unknown models (use gpt-4o pricing)
+# Fallback pricing for unknown models (gpt-4o pricing)
 fallback:
   input: 2.50
   cached_input: 1.25

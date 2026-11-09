@@ -10,8 +10,13 @@ bazarr:
 # Get your API key from: https://platform.openai.com/api-keys
 #
 # Two-model approach for cost optimization:
-# - gpt-5 handles complex context analysis with rule interpretation
-# - gpt-5 performs cost-effective translation guided by context
+# - analysis_model handles complex context analysis with rule interpretation
+# - translation_model performs translation guided by that context
+#
+# Model options (Nov 2026, flex price per 1M tokens in/out):
+# - gpt-6.1-sol   ($1.00/$5.00)  - recommended default, current-generation flagship value tier
+# - gpt-6-astra   ($5.00/$25.00) - top quality, ~5x the cost
+# - gpt-6.1-terra ($0.50/$2.50)  - cheaper; fine for translation, weaker for analysis
 #
 # Service tiers control pricing and performance:
 # - "auto": Standard pricing, fast responses (default for analysis)
@@ -21,8 +26,8 @@ bazarr:
 # Flex tier also provides automatic prompt caching (90% discount on cached tokens)
 openai:
   api_key: "YOUR_OPENAI_API_KEY_HERE"  # Your OpenAI API key
-  analysis_model: "gpt-5"       # Pass 1: Context analysis (complex rule interpretation)
-  translation_model: "gpt-5"    # Pass 2: Translation (cost-optimized with flex tier)
+  analysis_model: "gpt-6.1-sol"     # Pass 1: Context analysis (complex rule interpretation)
+  translation_model: "gpt-6.1-sol"  # Pass 2: Translation (cost-optimized with flex tier)
   batch_size: 50                # Number of subtitles per API call
   analysis_service_tier: "auto" # Standard tier for Pass 1 (interactive, needs fast responses)
   translation_service_tier: "flex" # Flex tier for Pass 2 (50% discount, can be slower)

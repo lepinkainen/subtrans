@@ -1,5 +1,7 @@
 """Translation logic using OpenAI GPT models."""
 
+import contextlib
+import functools
 import json
 import re
 import time
@@ -27,15 +29,13 @@ def _sleep(seconds: float) -> None:
 
 def _retry_delay_from_error(error: RateLimitError, fallback: float) -> float:
     """Extract Retry-After header if available, otherwise use fallback."""
-    try:
+    # If anything goes wrong, just fall back to default
+    with contextlib.suppress(Exception):
         headers = getattr(error, "response", None)
         header_dict = getattr(headers, "headers", {}) if headers else {}
         retry_after = header_dict.get("retry-after") or header_dict.get("Retry-After")
         if retry_after:
             return float(retry_after)
-    except Exception:
-        # If anything goes wrong, just fall back to default
-        pass
     return fallback
 
 
@@ -147,10 +147,7 @@ def _is_likely_separator(text: str) -> bool:
     # Repeated character patterns (3+ same char): ---, ***, ===, AAA, etc.
     # Regex: ^(.)\1{2,}$ means "same char repeated 3+ times"
     # This catches edge cases like "aaa" or "111" that might slip through
-    if re.match(r"^(.)\1{2,}$", stripped):
-        return True
-
-    return False
+    return bool(re.match(r"^(.)\1{2,}$", stripped))
 
 
 def _is_valid_translation_content(text: str) -> bool:
@@ -763,18 +760,17 @@ Third subtitle translation here"""
             position_note = "(End of movie)\n\n"
 
         translations: list[str] | None = None
+        user_content = f"{position_note}Translate to {target_lang}:\n\n{input_text}"
 
         for attempt in range(2):
             try:
                 response = _call_with_retries(
-                    lambda: client.chat.completions.create(
+                    functools.partial(
+                        client.chat.completions.create,
                         model=model,
                         messages=[
                             {"role": "system", "content": system_prompt},
-                            {
-                                "role": "user",
-                                "content": f"{position_note}Translate to {target_lang}:\n\n{input_text}",
-                            },
+                            {"role": "user", "content": user_content},
                         ],
                         service_tier=service_tier,
                         timeout=timeout,

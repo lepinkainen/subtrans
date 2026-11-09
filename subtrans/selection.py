@@ -4,17 +4,17 @@ import sys
 from typing import cast
 
 from prompt_toolkit.application import Application
+from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.layout.containers import HSplit, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
-from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.styles import Style
 from rich.table import Table
 
-from .core.models import Movie, Episode
 from .core.media_types import MediaType
+from .core.models import Episode, Movie
 from .core.utils import console
 
 

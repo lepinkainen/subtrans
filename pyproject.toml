@@ -3,7 +3,7 @@ name = "subtrans"
 version = "0.1.0"
 description = "Subtitle Translator - Translates English subtitles to Finnish using OpenAI GPT models"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.15"
 dependencies = [
     "httpx>=0.28.1",
     "openai>=2.8.1",
@@ -48,7 +48,7 @@ dev = [
 ]
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.15"
 python_executable = ".venv/bin/python3"
 exclude = [
     "^build/",
@@ -60,3 +60,11 @@ module = [
     "pysrt",
 ]
 ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py315"
+
+[tool.ruff.lint]
+# Broad `except Exception` is intentional in this CLI: errors are reported to
+# the user and the run continues with the next item.
+ignore = ["BLE001"]

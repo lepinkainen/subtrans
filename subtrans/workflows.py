@@ -24,7 +24,6 @@ from .processing.output import check_translation_exists, save_translated_subtitl
 from .processing.subtitles import find_mkv_file, get_source_subtitle
 from .processing.translator import analyze_subtitles, translate_subtitles_batch
 
-
 # ----- Helpers -------------------------------------------------------------
 
 

@@ -62,7 +62,7 @@ flowchart TD
     LoadSRT --> Combine[Combine all subtitle text]
     LoadCache --> Combine
 
-    Combine --> CallAPI[Call GPT-5 Analysis API<br/>Model: gpt-5<br/>Service tier: auto]
+    Combine --> CallAPI[Call Analysis API<br/>Model: gpt-6.1-sol<br/>Service tier: auto]
     CallAPI --> Response{API Success?}
 
     Response --> |Yes| ParseJSON[Parse JSON response]
@@ -91,7 +91,7 @@ flowchart TD
     BuildPrompt --> Batch[Split subtitles into batches<br/>Default: 50 per batch]
 
     Batch --> |For each batch| Format[Format batch with position markers<br/>Beginning/End of movie]
-    Format --> CallAPI[Call GPT-5 Translation API<br/>Model: gpt-5<br/>Service tier: flex<br/>Timeout: 900s]
+    Format --> CallAPI[Call Translation API<br/>Model: gpt-6.1-sol<br/>Service tier: flex<br/>Timeout: 900s]
 
     CallAPI --> Response{API Success?}
 

@@ -52,6 +52,21 @@ def test_calculate_cost_gpt5_flex():
     assert abs(cost - 0.084375) < 0.0001
 
 
+def test_calculate_cost_default_model_flex(capsys):
+    """Default config model (gpt-6.1-sol) must have flex pricing, not fall back."""
+    # gpt-6.1-sol flex: input=$1.00/1M, cached=$0.05/1M, output=$5.00/1M
+    cost = calculate_cost(
+        model="gpt-6.1-sol",
+        input_tokens=100_000,
+        output_tokens=10_000,
+        cached_tokens=50_000,
+        service_tier="flex",
+    )
+    # (50k * 1.00 + 50k * 0.05 + 10k * 5.00) / 1M = 0.05 + 0.0025 + 0.05
+    assert abs(cost - 0.1025) < 0.0001
+    assert "Warning" not in capsys.readouterr().out
+
+
 def test_calculate_cost_with_cached_tokens():
     """Test that cached tokens are properly discounted."""
     # gpt-4o standard: input=$2.50/1M, cached=$1.25/1M, output=$10.00/1M

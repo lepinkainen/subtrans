@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`subtrans` is a Python 3.14 tool that translates subtitles between languages using OpenAI GPT models. It integrates with Bazarr to discover movies and TV episodes missing target-language subtitles, then runs a two-phase context-aware translation pipeline.
+`subtrans` is a Python 3.15 tool that translates subtitles between languages using OpenAI GPT models. It integrates with Bazarr to discover movies and TV episodes missing target-language subtitles, then runs a two-phase context-aware translation pipeline.
 
 Single-user, private use. NAS-aware (SMB path mappings). Cache persistence is intentional.
 
@@ -56,7 +56,7 @@ Do not collapse the phases. The approval gate is the design.
 
 ### Hybrid service-tier cost model
 
-Both passes use `gpt-5` (configurable). The tiers differ:
+Both passes default to `gpt-6.1-sol` (configurable). The tiers differ:
 
 - Pass 1 → `service_tier="auto"` (standard pricing). Fast responses for interactive review.
 - Pass 2 → `service_tier="flex"` (50% discount, slower, automatic prompt caching gives 90% off cached tokens). Longer client timeout (~900s) accommodates Flex queueing. 429 "Resource Unavailable" is retried.

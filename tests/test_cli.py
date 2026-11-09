@@ -249,6 +249,7 @@ def test_select_by_pattern_case_insensitive():
 def test_select_by_pattern_no_matches():
     """Should exit with error when no matches found."""
     import pytest
+
     from subtrans.cli_ui import select_by_pattern
     from subtrans.core.models import Movie
 

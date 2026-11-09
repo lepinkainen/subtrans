@@ -20,7 +20,7 @@
 
 ## Coding Style & Naming Conventions
 
-- Python 3.14, 4-space indentation, PEP 8-aligned; keep type hints on public functions and dataclasses for shared models.
+- Python 3.15, 4-space indentation, PEP 8-aligned; keep type hints on public functions and dataclasses for shared models.
 - Use snake_case for functions/variables, PascalCase for classes, and descriptive argparse flag names (mirroring existing CLI).
 - Favor small, pure helpers in `processing/` and `core/`; keep Rich console messaging concise and user-facing.
 - When touching config or models, keep defaults in sync with `config.example.yml` and CLI defaults.
