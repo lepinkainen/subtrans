@@ -498,7 +498,7 @@ wheels = [
 [[package]]
 name = "pysrt"
 version = "1.2.0"
-source = { git = "https://github.com/lepinkainen/pysrt.git?rev=main#77bb88e651b7b81b8bcedfc0cd7132b17add2f31" }
+source = { git = "https://github.com/lepinkainen/pysrt.git?rev=main#c2a21012674e92772ffebd043b0157795f5c3806" }
 dependencies = [
     { name = "chardet" },
 ]
