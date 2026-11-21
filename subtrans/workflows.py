@@ -76,7 +76,7 @@ def load_and_validate_subtitle(
     """
     try:
         console.print(f"[blue]Loading subtitle: {srt_path}[/blue]")
-        subs = pysrt.open(srt_path, encoding="utf-8")
+        subs = pysrt.open(srt_path, encoding="utf-8-sig")
     except Exception:
         try:
             subs = pysrt.open(srt_path, encoding="latin-1")

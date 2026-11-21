@@ -243,7 +243,7 @@ def validate_subtitle_file(
 
     # Parse and count subtitle entries
     try:
-        subs = pysrt.open(srt_path, encoding="utf-8")
+        subs = pysrt.open(srt_path, encoding="utf-8-sig")
     except Exception:
         try:
             subs = pysrt.open(srt_path, encoding="latin-1")
@@ -376,7 +376,7 @@ def display_external_srt(srt_path: Path) -> tuple[int, int]:
     """
     # Parse SRT to get entry count
     try:
-        subtitles = pysrt.open(str(srt_path), encoding="utf-8")
+        subtitles = pysrt.open(str(srt_path), encoding="utf-8-sig")
         entry_count = len(subtitles)
     except Exception:
         # Fallback to latin-1 encoding
