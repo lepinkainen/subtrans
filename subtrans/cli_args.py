@@ -1,12 +1,19 @@
 """Command-line argument parsing for subtrans."""
 
 import argparse
+from collections.abc import Sequence
 from pathlib import Path
+from typing import get_args
+
+from .core.models import ServiceTier
 
 
-def parse_arguments() -> argparse.Namespace:
+def parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """
     Parse command-line arguments for subtrans.
+
+    Args:
+        argv: Arguments to parse (defaults to sys.argv[1:])
 
     Returns:
         Parsed arguments namespace
@@ -60,5 +67,25 @@ def parse_arguments() -> argparse.Namespace:
         metavar="PATTERN",
         help="Select items matching glob pattern (non-interactive, case-insensitive)",
     )
+    tiers = get_args(ServiceTier)
+    tier_list = ", ".join(tiers)
+    parser.add_argument(
+        "--tier",
+        choices=tiers,
+        metavar="TIER",
+        help=f"Override the service tier of both passes for this run only ({tier_list})",
+    )
+    parser.add_argument(
+        "--analysis-tier",
+        choices=tiers,
+        metavar="TIER",
+        help="Override openai.analysis_service_tier (Pass 1) for this run only",
+    )
+    parser.add_argument(
+        "--translation-tier",
+        choices=tiers,
+        metavar="TIER",
+        help="Override openai.translation_service_tier (Pass 2) for this run only",
+    )
 
-    return parser.parse_args()
+    return parser.parse_args(argv)

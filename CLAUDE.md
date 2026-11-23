@@ -38,6 +38,8 @@ uv run subtrans --legacy-selection    # numbered prompt instead of fzf
 uv run subtrans --force-fzf           # force fzf when terminal detection fails
 uv run subtrans --stats               # token usage / cost summary, then exit
 uv run subtrans --stats --movie X     # filter stats by title
+uv run subtrans --tier default        # override both passes' service tier for this run (e.g. flex_unavailable)
+uv run subtrans --analysis-tier default --translation-tier flex  # per-pass overrides; win over --tier
 uv run subtrans -c custom.yml         # custom config path
 ```
 

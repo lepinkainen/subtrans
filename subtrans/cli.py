@@ -74,6 +74,25 @@ def main():
         sys.exit(130)
 
 
+def _apply_cli_overrides(config: Config, args) -> None:
+    """Apply per-run CLI overrides on top of the loaded config (not persisted).
+
+    A per-pass flag (--analysis-tier / --translation-tier) wins over --tier.
+    """
+    analysis_tier = args.analysis_tier or args.tier
+    translation_tier = args.translation_tier or args.tier
+    if analysis_tier:
+        config.analysis_service_tier = analysis_tier
+    if translation_tier:
+        config.translation_service_tier = translation_tier
+
+
+def _override_note(pass_tier: str | None, both_tier: str | None) -> str:
+    if pass_tier or both_tier:
+        return ", overridden on command line"
+    return ""
+
+
 def _main_impl():
     args = parse_arguments()
 
@@ -88,6 +107,7 @@ def _main_impl():
         )
 
     config = load_config(args.config)
+    _apply_cli_overrides(config, args)
 
     console.print(f"[blue]Bazarr URL: {config.bazarr_url}[/blue]")
     console.print(
@@ -101,11 +121,13 @@ def _main_impl():
     else:
         console.print(
             f"[blue]Analysis model: {config.analysis_model} "
-            f"(tier: {config.analysis_service_tier})[/blue]"
+            f"(tier: {config.analysis_service_tier}"
+            f"{_override_note(args.analysis_tier, args.tier)})[/blue]"
         )
         console.print(
             f"[blue]Translation model: {config.translation_model} "
-            f"(tier: {config.translation_service_tier})[/blue]"
+            f"(tier: {config.translation_service_tier}"
+            f"{_override_note(args.translation_tier, args.tier)})[/blue]"
         )
         console.print(f"[blue]Batch size: {config.batch_size}[/blue]")
 
