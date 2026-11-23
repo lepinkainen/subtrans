@@ -3,10 +3,45 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 # Add the project root to path to allow imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from subtrans.core.models import Episode, Movie
+
+
+@pytest.mark.parametrize(
+    ("source_lang", "source_label", "use_fallback"),
+    [("en", "English", False), ("sv", "sv", True)],
+)
+def test_saved_translation_has_one_final_credit(
+    tmp_path, monkeypatch, source_lang, source_label, use_fallback
+):
+    import pysrt
+
+    from subtrans.processing import output
+
+    monkeypatch.setattr(output, "CACHE_DIR", tmp_path)
+    media_dir = tmp_path / "offline" if use_fallback else tmp_path
+    mkv = media_dir / "movie.mkv"
+    movie = Movie(1, "Movie", 2025, str(mkv), ["fi"], [])
+    subs = pysrt.from_string("7\n00:00:01,000 --> 00:00:03,000\nKiitos!\n")
+
+    path = output.save_translated_subtitle(
+        subs, movie, mkv, source_lang=source_lang, translation_model="test-model"
+    )
+
+    assert path == tmp_path / ("Movie_2025.fi.srt" if use_fallback else "movie.fi.srt")
+    dialogue, credit = pysrt.open(path, encoding="utf-8")
+    assert len(subs) == 1
+    assert str(dialogue) == str(subs[0])
+    assert credit.index == 8
+    assert dialogue.end < credit.start < credit.end
+    assert credit.text == (
+        f"Translated from {source_label} with Subtrans (test-model)\n"
+        "https://github.com/lepinkainen/subtrans"
+    )
 
 
 def test_save_translated_subtitle_simple_filename(tmp_path):

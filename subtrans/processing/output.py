@@ -65,6 +65,9 @@ def save_translated_subtitle(
     media: MediaItem,
     mkv_path: Path | None = None,
     target_lang: str = "fi",
+    *,
+    source_lang: str = "en",
+    translation_model: str | None = None,
 ) -> Path:
     """
     Save the translated subtitles with target language suffix (e.g., .fi.srt, .es.srt).
@@ -74,6 +77,8 @@ def save_translated_subtitle(
         media: Movie or Episode object
         mkv_path: Path to MKV file (if known)
         target_lang: Target language code (ISO 639-1/2)
+        source_lang: Source subtitle language for the final credit
+        translation_model: Translation model to credit, if supplied
 
     Returns:
         Path where subtitle was saved
@@ -113,6 +118,26 @@ def save_translated_subtitle(
                 else:
                     # Unreachable, but needed for type checking
                     output_path = media_dir / f"unknown.{target_lang}.srt"
+
+    if translation_model and translated_subs:
+        source = "English" if source_lang.lower() in {"en", "eng"} else source_lang
+        start = max(cue.end for cue in translated_subs) + 250
+        last_index = max(
+            (cue.index for cue in translated_subs if isinstance(cue.index, int)),
+            default=len(translated_subs),
+        )
+        translated_subs = translated_subs.slice()
+        translated_subs.append(
+            pysrt.SubRipItem(
+                index=last_index + 1,
+                start=start,
+                end=start + 6000,
+                text=(
+                    f"Translated from {source} with Subtrans ({translation_model})\n"
+                    "https://github.com/lepinkainen/subtrans"
+                ),
+            )
+        )
 
     # Try to save to the media directory
     try:

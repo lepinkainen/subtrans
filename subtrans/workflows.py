@@ -462,7 +462,12 @@ def process_phase2(
 
     mkv_path = find_mkv_file(media.path)
     output_path = save_translated_subtitle(
-        translated, media, mkv_path, target_lang=config.target_language
+        translated,
+        media,
+        mkv_path,
+        target_lang=config.target_language,
+        source_lang=config.source_language,
+        translation_model=config.translation_model,
     )
     console.print(
         f"[bold green]Saved {config.target_language} subtitles: {output_path}[/bold green]"
