@@ -842,3 +842,114 @@ class TestBatchETA:
         eta_pattern = re.compile(r"ETA (< 1min|\d+min|\d+h \d+min) \(\d{2}:\d{2}\)")
         for msg in batch_messages:
             assert eta_pattern.search(msg), f"ETA format should match pattern in: {msg}"
+
+
+# ----- 429 handling: rate limit vs. exhausted quota -----------------------
+
+
+def _rate_limit_error(code, message="msg", headers=None, wrapped=False):
+    """Build a RateLimitError as the SDK does (body = unwrapped error dict)."""
+    from openai import RateLimitError
+
+    err = {"message": message, "type": code, "param": None, "code": code}
+    return RateLimitError(
+        message=f"Error code: 429 - {err}",
+        response=MagicMock(status_code=429, headers=headers or {}),
+        body={"error": err} if wrapped else err,
+    )
+
+
+def test_insufficient_quota_is_not_retried(monkeypatch):
+    from openai import RateLimitError
+
+    from subtrans.processing.translator import _call_with_retries
+
+    sleeps: list[float] = []
+    monkeypatch.setattr("subtrans.processing.translator._sleep", sleeps.append)
+    request = Mock(side_effect=_rate_limit_error("insufficient_quota"))
+
+    with pytest.raises(RateLimitError):
+        _call_with_retries(request)
+
+    assert request.call_count == 1
+    assert sleeps == []
+
+
+def test_rate_limit_is_retried_with_retry_after(monkeypatch):
+    from subtrans.core.utils import console
+    from subtrans.processing.translator import _call_with_retries
+
+    sleeps: list[float] = []
+    monkeypatch.setattr("subtrans.processing.translator._sleep", sleeps.append)
+    request = Mock(
+        side_effect=[
+            _rate_limit_error(
+                "rate_limit_exceeded",
+                "Rate limit reached for [tokens]",
+                headers={"retry-after": "300"},
+            ),
+            "ok",
+        ]
+    )
+
+    with console.capture() as capture:
+        assert _call_with_retries(request) == "ok"
+    out = capture.get()
+
+    assert sleeps == [300.0]
+    assert "rate_limit_exceeded" in out
+    assert "Rate limit reached for [tokens]" in out
+
+
+def test_error_info_handles_wrapped_and_unwrapped_bodies():
+    from subtrans.processing.translator import _is_quota_exhausted, _openai_error_info
+
+    for wrapped in (False, True):
+        err = _rate_limit_error("insufficient_quota", "out of credit", wrapped=wrapped)
+        assert _openai_error_info(err) == ("insufficient_quota", "out of credit")
+        assert _is_quota_exhausted(err)
+    assert not _is_quota_exhausted(_rate_limit_error("rate_limit_exceeded"))
+
+
+def test_persistent_rate_limit_is_not_reported_as_quota(monkeypatch):
+    import pysrt
+
+    from subtrans.core.utils import console
+
+    monkeypatch.setattr("subtrans.processing.translator._sleep", lambda *_: None)
+    client = Mock()
+    client.chat.completions.create.side_effect = _rate_limit_error(
+        "rate_limit_exceeded", "slow down"
+    )
+    subs = pysrt.SubRipFile(
+        [pysrt.SubRipItem(1, start="00:00:01,000", end="00:00:02,000", text="Hi")]
+    )
+
+    with console.capture() as capture, pytest.raises(SystemExit):
+        analyze_subtitles(subs, client, "Test Movie", model="gpt-4o")
+    out = capture.get()
+
+    assert client.chat.completions.create.call_count == 3
+    assert "rate limiting" in out
+    assert "quota" not in out.lower()
+
+
+def test_quota_exhausted_reports_billing_without_retry(monkeypatch):
+    import pysrt
+
+    from subtrans.core.utils import console
+
+    monkeypatch.setattr("subtrans.processing.translator._sleep", lambda *_: None)
+    client = Mock()
+    client.chat.completions.create.side_effect = _rate_limit_error(
+        "insufficient_quota", "You exceeded your current quota"
+    )
+    subs = pysrt.SubRipFile(
+        [pysrt.SubRipItem(1, start="00:00:01,000", end="00:00:02,000", text="Hi")]
+    )
+
+    with console.capture() as capture, pytest.raises(SystemExit):
+        analyze_subtitles(subs, client, "Test Movie", model="gpt-4o")
+
+    assert client.chat.completions.create.call_count == 1
+    assert "out of credit" in capture.get()

@@ -13,6 +13,7 @@ from typing import Any, cast
 import pysrt
 from openai import APIStatusError, OpenAI, RateLimitError
 from openai.types.chat.chat_completion import ChatCompletion
+from rich.markup import escape
 
 from ..core.models import ContextResponse, ServiceTier, TranslationContext
 from ..core.token_logger import log_token_usage as log_tokens
@@ -27,7 +28,7 @@ def _sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
-def _retry_delay_from_error(error: RateLimitError, fallback: float) -> float:
+def _retry_delay_from_error(error: APIStatusError, fallback: float) -> float:
     """Extract Retry-After header if available, otherwise use fallback."""
     # If anything goes wrong, just fall back to default
     with contextlib.suppress(Exception):
@@ -37,6 +38,49 @@ def _retry_delay_from_error(error: RateLimitError, fallback: float) -> float:
         if retry_after:
             return float(retry_after)
     return fallback
+
+
+def _openai_error_info(error: APIStatusError) -> tuple[str | None, str]:
+    """Return (code, message) from an OpenAI API error.
+
+    OpenAI uses HTTP 429 both for rate limits (``rate_limit_exceeded``) and
+    for an exhausted balance (``insufficient_quota``); only the code tells
+    them apart. Handles both the SDK's unwrapped body and a raw
+    ``{"error": {...}}`` envelope.
+    """
+    body = getattr(error, "body", None)
+    if isinstance(body, dict) and isinstance(body.get("error"), dict):
+        body = body["error"]
+    if not isinstance(body, dict):
+        body = {}
+    code = getattr(error, "code", None) or body.get("code") or body.get("type")
+    message = body.get("message") or getattr(error, "message", "") or str(error)
+    return code, message
+
+
+def _is_quota_exhausted(error: APIStatusError) -> bool:
+    """True when a 429 means the account is out of credit (not retryable)."""
+    code, _ = _openai_error_info(error)
+    return code == "insufficient_quota"
+
+
+def _report_rate_limit_failure(error: APIStatusError, progress: str = "") -> None:
+    """Explain why a 429 aborted the run: out of credit vs. persistent rate limit."""
+    code, message = _openai_error_info(error)
+    if _is_quota_exhausted(error):
+        console.print(
+            "\n[red]OpenAI API quota exhausted (out of credit).[/red]\n"
+            "Add funds or check your plan at:\n"
+            "https://platform.openai.com/settings/organization/billing\n"
+        )
+    else:
+        console.print(
+            "\n[red]OpenAI kept rate limiting requests after all retries.[/red]\n"
+            f"[dim]{code or 'no error code'}: {escape(message)}[/dim]\n"
+            "Wait a while and re-run.\n"
+        )
+    if progress:
+        console.print(progress)
 
 
 def _calculate_text_similarity(text1: str, text2: str) -> float:
@@ -302,42 +346,33 @@ def _call_with_retries(
     Call an OpenAI request function with bounded retries and exponential backoff.
     Raises the last exception if all attempts fail.
 
-    Handles:
-    - RateLimitError: Standard rate limiting (429)
-    - APIStatusError with 429: Flex tier "resource unavailable" errors
-      (user is NOT charged when this occurs, safe to retry)
+    429s are retried (honouring Retry-After) except ``insufficient_quota``,
+    which is raised immediately. Flex "resource unavailable" 429s are not
+    charged, so retrying them is safe. Other API status errors are raised
+    immediately.
     """
     last_exception: RateLimitError | APIStatusError | Exception | None = None
 
     for attempt in range(max_attempts):
         try:
             return request_fn()
-        except RateLimitError as e:
+        except APIStatusError as e:
+            # RateLimitError is an APIStatusError subclass, so every 429 lands
+            # here: standard rate limits, Flex "resource unavailable", and
+            # insufficient_quota. Only the last one is not worth retrying.
+            if e.status_code != 429 or _is_quota_exhausted(e):
+                raise
             last_exception = e
             if attempt == max_attempts - 1:
                 raise
+            code, message = _openai_error_info(e)
             delay = _retry_delay_from_error(e, backoff_base * (2**attempt))
             console.print(
-                f"[yellow]Rate limit hit. Retrying in {delay:.1f}s "
-                f"({attempt + 1}/{max_attempts})[/yellow]"
+                f"[yellow]Rate limited by OpenAI ({code or 'no error code'}). "
+                f"Retrying in {delay:.1f}s ({attempt + 1}/{max_attempts})[/yellow]"
             )
+            console.print(f"[dim]  {escape(message)}[/dim]")
             _sleep(delay)
-        except APIStatusError as e:
-            # Handle Flex tier 429 "resource unavailable" errors
-            # These are different from rate limits - user is not charged
-            if e.status_code == 429:
-                last_exception = e
-                if attempt == max_attempts - 1:
-                    raise
-                delay = backoff_base * (2**attempt)
-                console.print(
-                    f"[yellow]Flex resources unavailable. Retrying in {delay:.1f}s "
-                    f"({attempt + 1}/{max_attempts})[/yellow]"
-                )
-                _sleep(delay)
-            else:
-                # Re-raise non-429 API errors immediately
-                raise
         except Exception as e:
             last_exception = e
             if attempt == max_attempts - 1:
@@ -466,12 +501,7 @@ Requirements:
         return parsed.to_translation_context(raw_json=result)
 
     except RateLimitError as e:
-        console.print(
-            "[red]OpenAI API quota exceeded![/red]\n"
-            "You have exceeded your current OpenAI API quota.\n"
-            "Please check your plan and billing details at:\n"
-            "https://platform.openai.com/account/billing\n"
-        )
+        _report_rate_limit_failure(e)
         raise SystemExit(1) from e
     except Exception as e:
         console.print(
@@ -811,12 +841,10 @@ Third subtitle translation here"""
                 break
 
             except RateLimitError as e:
-                console.print(
-                    f"\n[red]OpenAI API quota exceeded at batch {batch_num}![/red]\n"
-                    "You have exceeded your current OpenAI API quota.\n"
-                    "Please check your plan and billing details at:\n"
-                    "https://platform.openai.com/account/billing\n\n"
-                    f"Progress: {batch_num - 1}/{total_batches} batches completed.\n"
+                _report_rate_limit_failure(
+                    e,
+                    f"Stopped at batch {batch_num}. Progress: "
+                    f"{batch_num - 1}/{total_batches} batches completed.",
                 )
                 raise SystemExit(1) from e
             except Exception as e:
