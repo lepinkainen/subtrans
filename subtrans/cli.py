@@ -30,7 +30,12 @@ from .integrations.bazarr import (
     populate_episode_paths_bulk,
     populate_movie_path,
 )
-from .workflows import process_phase1, process_phase2
+from .workflows import (
+    ShortLineReport,
+    print_short_line_reports,
+    process_phase1,
+    process_phase2,
+)
 
 
 def _run_phase(
@@ -130,49 +135,65 @@ def _main_impl():
         selected = _gather_movies(args, config)
         media_label = "movies"
 
-    if args.extract_only:
-        console.print("\n[bold blue]Extract-Only Mode: Caching Subtitles[/bold blue]")
-        accepted = _run_phase(
+    # Short lines are non-fatal; summarise them however the run ends.
+    short_reports: list[ShortLineReport] = []
+    try:
+        if args.extract_only:
+            console.print(
+                "\n[bold blue]Extract-Only Mode: Caching Subtitles[/bold blue]"
+            )
+            accepted = _run_phase(
+                selected,
+                lambda item, **kw: process_phase1(
+                    item, client, config, short_line_reports=short_reports, **kw
+                ),
+                extract_only=True,
+            )
+            console.print(
+                f"\n[bold]Completed: {len(accepted)}/{len(selected)} subtitles cached[/bold]"
+            )
+            sys.exit(0)
+
+        console.print("\n[bold blue]Phase 1: Context Analysis[/bold blue]")
+        approved = _run_phase(
             selected,
-            lambda item, **kw: process_phase1(item, client, config, **kw),
-            extract_only=True,
+            lambda item, **kw: process_phase1(
+                item, client, config, short_line_reports=short_reports, **kw
+            ),
         )
+
+        if not approved:
+            console.print(
+                f"[yellow]No {media_label} approved for translation.[/yellow]"
+            )
+            sys.exit(0)
+
         console.print(
-            f"\n[bold]Completed: {len(accepted)}/{len(selected)} subtitles cached[/bold]"
+            f"\n[green]{len(approved)}/{len(selected)} {media_label} "
+            "approved for translation[/green]"
         )
-        sys.exit(0)
 
-    console.print("\n[bold blue]Phase 1: Context Analysis[/bold blue]")
-    approved = _run_phase(
-        selected,
-        lambda item, **kw: process_phase1(item, client, config, **kw),
-    )
+        if client is None:
+            console.print(
+                "[red]OpenAI client not configured; cannot run Phase 2.[/red]"
+            )
+            sys.exit(1)
 
-    if not approved:
-        console.print(f"[yellow]No {media_label} approved for translation.[/yellow]")
-        sys.exit(0)
+        console.print("\n[bold blue]Phase 2: Translation[/bold blue]")
+        phase2_start = time.time()
+        success = _run_phase(
+            approved,
+            lambda item, **kw: process_phase2(item, client, config, **kw),
+        )
+        elapsed = _format_elapsed(time.time() - phase2_start)
 
-    console.print(
-        f"\n[green]{len(approved)}/{len(selected)} {media_label} "
-        "approved for translation[/green]"
-    )
+        console.print(
+            f"\n[bold]Completed: {len(success)}/{len(approved)} {media_label} "
+            f"translated (elapsed: {elapsed})[/bold]"
+        )
 
-    if client is None:
-        console.print("[red]OpenAI client not configured; cannot run Phase 2.[/red]")
-        sys.exit(1)
-
-    console.print("\n[bold blue]Phase 2: Translation[/bold blue]")
-    phase2_start = time.time()
-    success = _run_phase(
-        approved,
-        lambda item, **kw: process_phase2(item, client, config, **kw),
-    )
-    elapsed = _format_elapsed(time.time() - phase2_start)
-
-    console.print(
-        f"\n[bold]Completed: {len(success)}/{len(approved)} {media_label} "
-        f"translated (elapsed: {elapsed})[/bold]"
-    )
+    finally:
+        print_short_line_reports(short_reports)
 
 
 def _select_episodes(episodes: list[Episode], args, config: Config) -> list[Episode]:

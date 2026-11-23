@@ -3,12 +3,14 @@
 import os
 import subprocess
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pysrt
 from openai import OpenAI
 from rich.columns import Columns
 from rich.json import JSON
+from rich.markup import escape
 from rich.panel import Panel
 
 from .core.cache import (
@@ -25,6 +27,84 @@ from .processing.subtitles import find_mkv_file, get_source_subtitle
 from .processing.translator import analyze_subtitles, translate_subtitles_batch
 
 # ----- Helpers -------------------------------------------------------------
+
+
+SHORT_LINE_CONTEXT = 2  # entries shown before/after each short line
+
+
+@dataclass
+class ShortLineReport:
+    """Entries below ``min_text_length`` in one subtitle file (non-fatal).
+
+    ``positions`` are 0-based offsets into ``subs`` (not SRT index numbers),
+    so context lookup works even when the file's numbering is off.
+    """
+
+    title: str
+    srt_path: Path
+    subs: pysrt.SubRipFile
+    positions: list[int] = field(default_factory=list)
+
+
+def find_short_positions(subs: pysrt.SubRipFile, min_text_length: int) -> list[int]:
+    """Return offsets of entries shorter than ``min_text_length``.
+
+    Texts on pysrt's allow-list (e.g. a lone music note) are exempt.
+    """
+    allowed = pysrt.ValidationOptions().allowed_short_texts
+    short = []
+    for pos, sub in enumerate(subs):
+        text = sub.text.strip()
+        if len(text) < min_text_length and text not in allowed:
+            short.append(pos)
+    return short
+
+
+def context_groups(
+    positions: list[int], length: int, radius: int = SHORT_LINE_CONTEXT
+) -> list[range]:
+    """Merge ±``radius`` windows around ``positions`` into contiguous ranges."""
+    groups: list[range] = []
+    for pos in sorted(positions):
+        start, stop = max(0, pos - radius), min(length, pos + radius + 1)
+        if groups and start <= groups[-1].stop:
+            groups[-1] = range(groups[-1].start, max(groups[-1].stop, stop))
+        else:
+            groups.append(range(start, stop))
+    return groups
+
+
+def print_short_line_reports(reports: list[ShortLineReport]) -> None:
+    """Print collected short lines with surrounding context for review."""
+    if not reports:
+        return
+    total = sum(len(r.positions) for r in reports)
+    console.print(f"\n[bold yellow]{'=' * 60}[/bold yellow]")
+    console.print(
+        f"[bold yellow]Short subtitle lines: {total} in {len(reports)} file(s)[/bold yellow]"
+    )
+    console.print(
+        "[dim]These did not block processing. Review whether the source "
+        "needs cleanup or re-extraction.[/dim]"
+    )
+    for report in reports:
+        console.print(f"\n[bold]{escape(report.title)}[/bold]")
+        console.print(f"[dim]{escape(str(report.srt_path))}[/dim]", soft_wrap=True)
+        flagged = set(report.positions)
+        for group_no, group in enumerate(
+            context_groups(report.positions, len(report.subs))
+        ):
+            if group_no:
+                console.print("  [dim]⋮[/dim]")
+            for pos in group:
+                sub = report.subs[pos]
+                line = (
+                    f"#{sub.index:<5} {sub.start} → {sub.end}  {escape(repr(sub.text))}"
+                )
+                if pos in flagged:
+                    console.print(f"[bold yellow]--> {line}[/bold yellow]")
+                else:
+                    console.print(f"[dim]    {line}[/dim]")
 
 
 def _print_phase_header(media: MediaItem, label: str, current: int, total: int) -> None:
@@ -147,11 +227,13 @@ def process_phase1(
     current_index: int = 1,
     total: int = 1,
     extract_only: bool = False,
+    short_line_reports: list[ShortLineReport] | None = None,
 ) -> bool:
     """Phase 1: extract subtitle, optionally analyze context, prompt for approval.
 
     Returns True if the user approved (or extract-only succeeded), False if
-    cancelled or errored.
+    cancelled or errored. Too-short lines are not fatal; they are appended to
+    ``short_line_reports`` for an end-of-run summary.
     """
     _print_phase_header(media, "Processing", current_index, total)
     _apply_and_announce_path_mapping(media, config.path_mappings or None)
@@ -180,15 +262,28 @@ def process_phase1(
         return False
 
     if config.validate_subtitles:
+        # min_text_length=0 disables pysrt's fatal short-text check; short
+        # lines are reported separately instead.
         errors = subs.validate(
             min_duration_ms=config.min_duration_ms,
             max_duration_secs=config.max_duration_secs,
-            min_text_length=config.min_text_length,
+            min_text_length=0,
             max_text_length=config.max_text_length,
         )
         if errors:
             _print_validation_errors(errors)
             return False
+
+        short = find_short_positions(subs, config.min_text_length)
+        if short:
+            console.print(
+                f"[yellow]Note: {len(short)} short line(s) "
+                f"(< {config.min_text_length} chars), listed at end of run[/yellow]"
+            )
+            if short_line_reports is not None:
+                short_line_reports.append(
+                    ShortLineReport(media.display_title, srt_path, subs, short)
+                )
 
     if extract_only:
         console.print(
