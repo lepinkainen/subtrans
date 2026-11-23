@@ -149,3 +149,18 @@ def test_print_short_line_reports_silent_when_empty() -> None:
         print_short_line_reports([])
 
     assert capture.get() == ""
+
+
+def test_wrapped_json_wraps_long_values_instead_of_cropping() -> None:
+    from rich.console import Console
+
+    from subtrans.workflows import _wrapped_json
+
+    tail = "UNIQUE_TAIL_MARKER"
+    data = {"characters": {"Evelyn": "word " * 40 + tail}}
+    console = Console(width=60, record=True, color_system=None)
+    console.print(_wrapped_json(data))
+    output = console.export_text()
+
+    assert tail in output
+    assert all(len(line) <= 60 for line in output.splitlines())

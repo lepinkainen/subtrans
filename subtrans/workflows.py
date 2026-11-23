@@ -12,6 +12,7 @@ from rich.columns import Columns
 from rich.json import JSON
 from rich.markup import escape
 from rich.panel import Panel
+from rich.text import Text
 
 from .core.cache import (
     clear_cached_subtitle,
@@ -44,6 +45,17 @@ class ShortLineReport:
     srt_path: Path
     subs: pysrt.SubRipFile
     positions: list[int] = field(default_factory=list)
+
+
+def _wrapped_json(data: object) -> Text:
+    """Pretty-print JSON as Rich text that wraps instead of cropping.
+
+    Rich's JSON renderable forces no_wrap, which cuts long values at the panel edge.
+    """
+    text = JSON.from_data(data, indent=2).text
+    text.no_wrap = False
+    text.overflow = "fold"
+    return text
 
 
 def find_short_positions(subs: pysrt.SubRipFile, min_text_length: int) -> list[int]:
@@ -347,7 +359,7 @@ def _run_analysis_and_approve(
 
     console.print("\n[bold blue]Translation Context (Pass 1 Analysis):[/bold blue]")
     panel = Panel(
-        JSON.from_data(context.raw_json, indent=2),
+        _wrapped_json(context.raw_json),
         title=f"Context for {media.display_title}",
         title_align="left",
         border_style="blue",
